@@ -524,13 +524,24 @@ class H(BaseHTTPRequestHandler):
     server_version = "WitnessONE-Agent/" + VERSION
     _LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
     def _allowed_origin(self):
-        """The request Origin iff it is a localhost origin (the served UI's own
-        origin), else None. Never '*' — a foreign page must not be able to read
-        agent responses. Absent Origin (same-origin navigation/GET) → None, and
-        the caller simply omits ACAO, which same-origin requests don't need."""
+        """The request Origin iff the agent may reflect it in ACAO, else None.
+        Allowed: a localhost http(s) origin (the agent-served UI's own origin),
+        and the literal 'null' origin that a browser sends for a page opened from
+        file:// — WitnessONE's documented zero-install field mode is "open
+        dist/WitnessONE.html" directly, and that page must still reach the local
+        agent. Never '*' — a foreign http(s) page must not read agent responses.
+        Absent Origin (same-origin navigation/GET) → None, and the caller simply
+        omits ACAO, which same-origin requests don't need.
+
+        Allowing 'null' does admit other null-origin contexts (sandboxed iframes,
+        data: URLs); the anti-DNS-rebinding backbone stays the Host-header check
+        in _guard(), which is origin-independent, so this is a bounded trade-off
+        made to keep the documented file:// deployment working."""
         origin = self.headers.get("Origin")
         if not origin:
             return None
+        if origin == "null":
+            return "null"
         try:
             o = urlparse(origin)
         except Exception:
