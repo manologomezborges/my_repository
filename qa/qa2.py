@@ -1,8 +1,11 @@
 import asyncio, os
 from playwright.async_api import async_playwright
 
-URL='file:///home/claude/witnessone/dist/WitnessONE.html'
-OUT='/home/claude/witnessone/qa/'
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+URL = 'file://' + os.path.join(ROOT, 'dist', 'WitnessONE.html')
+OUT = os.path.join(HERE, '_artifacts') + os.sep
+os.makedirs(OUT, exist_ok=True)
 errors=[]
 
 async def main():
@@ -50,12 +53,14 @@ async def main():
             await d.save_as(OUT+name)
         print('DL OK')
         await b.close()
-        # render downloaded certificate to PDF
+        # render downloaded certificate to PDF — NOTE: this writes into the
+        # gitignored _artifacts dir under a distinct name so it never touches
+        # the curated, tracked qa/Sample_FWT_Certificate.pdf sample.
         b=await pw.chromium.launch()
         pg=await b.new_page()
         await pg.goto('file://'+OUT+'sample_certificate.html')
         await pg.wait_for_timeout(800)
-        await pg.pdf(path=OUT+'Sample_FWT_Certificate.pdf',format='A4',
+        await pg.pdf(path=OUT+'QA2_Sample_FWT_Certificate.pdf',format='A4',
                      margin={'top':'10mm','bottom':'10mm','left':'8mm','right':'8mm'},
                      print_background=True)
         await pg.screenshot(path=OUT+'17_cert_standalone.png',full_page=False)

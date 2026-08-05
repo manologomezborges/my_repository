@@ -1,7 +1,11 @@
-import asyncio
+import asyncio, os, sys
 from playwright.async_api import async_playwright
-URL='file:///home/claude/witnessone/dist/WitnessONE.html'
-OUT='/home/claude/witnessone/qa/'
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+URL = 'file://' + os.path.join(ROOT, 'dist', 'WitnessONE.html')
+OUT = os.path.join(HERE, '_artifacts') + os.sep
+os.makedirs(OUT, exist_ok=True)
 errors=[]
 async def main():
     async with async_playwright() as pw:
@@ -19,4 +23,6 @@ async def main():
             print(mk,'ok')
             await b.close()
     print('PAGEERRORS:', errors if errors else 'none')
+    if errors:
+        sys.exit(1)
 asyncio.run(main())

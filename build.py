@@ -6,6 +6,51 @@ offline file. The same templates are served live by the WitnessONE Agent."""
 import json, glob, os, datetime
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
+
+# DATA-5: build-time FC/table validation (mirrors the Agent's addr_split() +
+# validate_point_fcs()). The Agent resolves the Modbus table SOLELY from a
+# point's address prefix, so a declared readFC/writeFC that disagrees with that
+# table is silently ignored and a DIFFERENT register is witnessed. A
+# field-derived revision must likewise never masquerade as 'approved'. On
+# violation we warn loudly and coerce the offending revision to 'field-draft'
+# so bad data can never ship as an approved SPL.
+_FC_FOR_KIND = {'input': 4, 'hold': 3, 'disc': 2, 'coil': 1}
+
+def _addr_kind(addr):
+    a = int(addr)
+    if a >= 400001: return 'hold'
+    if a >= 300001: return 'input'
+    if a >= 100001: return 'disc'
+    if a >= 40001:  return 'hold'
+    if a >= 30001:  return 'input'
+    if a >= 10001:  return 'disc'
+    return 'coil'
+
+def _fc_int(v):
+    # A declared FC only counts if it parses to an int; "N/A"/"" are
+    # not-applicable markers, not a contradictory declaration.
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+def validate_rev_fcs(rev):
+    """Return human-readable FC/table violations for a points-list revision
+    (same rule as agent.validate_point_fcs)."""
+    warns = []
+    for p in (rev.get('spl', {}).get('points') or []):
+        pid = p.get('id') or p.get('name') or '?'
+        for a in (p.get('addrs') or []):
+            kind = _addr_kind(a)
+            exp = _FC_FOR_KIND.get(kind)
+            rfc = _fc_int(p.get('readFC'))
+            if rfc is not None and exp is not None and rfc != exp:
+                warns.append(f"{pid}: addr {a} is {kind} (FC{exp}) but declares readFC={rfc}")
+            wfc = _fc_int(p.get('writeFC'))
+            if wfc is not None and kind in ('input', 'disc'):
+                warns.append(f"{pid}: addr {a} is read-only {kind} but declares writeFC={wfc}")
+    return warns
+
 ORDER = ['01_head.html', '02_body.html', '04_three_lib.html', '03_registry.js',
          '04b_registry.js', '05_sim.js', '05b_live.js', '06_scene.js',
          '07_ui.js', '08_test.js', '09_report.js', '09b_help.js', '09c_flow.js',
@@ -26,6 +71,20 @@ def gen_registry():
             assert r.get('schema', '').startswith('witnessone.pointslist/'), f'bad schema in {p}'
             assert r['spl']['points'], f'no points in {p}'
             revs.append(r)
+        # DATA-5: validate each revision's declared FCs against the
+        # address-implied Modbus table, and guard field-derived revisions.
+        # Coerce any offender to 'field-draft' so it cannot ship as approved.
+        for r in revs:
+            viol = validate_rev_fcs(r)
+            if viol:
+                print(f"  WARN {d['id']}/{r.get('revId')}: readFC/writeFC disagree with the "
+                      f"address-implied Modbus table for {len(viol)} point(s): {viol}")
+            field_derived = bool(r.get('basedOn'))
+            if (viol or field_derived) and r.get('status') == 'approved':
+                why = 'field-derived revision' if field_derived else 'FC/table violation(s)'
+                print(f"  WARN {d['id']}/{r.get('revId')}: {why} — coercing status "
+                      f"'approved' -> 'field-draft' so bad data cannot ship as an approved SPL")
+                r['status'] = 'field-draft'
         # approved first, then drafts; newest label last wins nothing — stable by file order
         revs.sort(key=lambda r: (r.get('status') != 'approved', r.get('revId','')))
         assert revs, f"device {d['id']} has no points-list revisions"

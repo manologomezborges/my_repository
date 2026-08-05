@@ -53,7 +53,8 @@ LIVE.tagName=function(p,i){
   return `${p.id}_${lab}`;
 };
 function dtypeOf(p){ const rt=(p.regType||'').toLowerCase();
-  if(rt.includes('bool'))return 1;                                                    // Boolean
+  if(p.bit!=null)return 5;                                                            // bit within a word → provision as raw Word; composePoint() extracts the bit
+  if(rt.includes('bool'))return 1;                                                    // Boolean (true coil / discrete)
   if(p.span32){ if(rt==='float32')return 8;                                           // Float (2 registers)
     return (p.signed==='Signed')?6:7; }                                              // Long / DWord (2 registers)
   return (p.signed==='Signed')?4:5; }                                                // Short / Word
@@ -155,11 +156,21 @@ LIVE.pollOnce=async function(){
     const q=ids.map(i=>'ids='+encodeURIComponent(i)).join('&');
     const r=await LIVE.call('/iotgateway/read?'+q,{iot:true});
     if(!(r.ok&&r.data&&r.data.readResults))throw r;
-    const vals={};
+    // Fold the gateway's per-tag results into an address-keyed word map, then
+    // decode through the SAME composePoint() the Agent path uses, so bit-mapped
+    // and 32-bit points collapse to ONE composed value on every live source
+    // instead of being served as a bare register. A tag the gateway flags BAD
+    // (s=false) becomes null → composePoint reports it BAD rather than certifying
+    // an untrusted reading as GOOD.
+    const valMap={},tsMap={};
     r.data.readResults.forEach((rr,k)=>{
-      const [pid,i]=index[k];
-      (vals[pid]=vals[pid]||{raws:[],ok:[],reasons:[],ts:rr.t}).raws[i]=rr.v;
-      vals[pid].ok[i]=rr.s;vals[pid].reasons[i]=rr.r;});
+      const [pid,i]=index[k];const p=DB.points.find(x=>x.id===pid);
+      if(!p||!p.addrs||p.addrs[i]==null)return;
+      valMap[String(p.addrs[i])]=rr.s?rr.v:null;
+      if(rr.t!=null)tsMap[pid]=rr.t;});
+    const vals={};
+    DB.points.forEach(p=>{ if(!p.addrs||!p.addrs.length)return;
+      const o=LIVE.composePoint(p,valMap,true);o.ts=tsMap[p.id];vals[p.id]=o;});
     LIVE.st.values=vals;LIVE.st.failCount=0;
   }catch(e){
     LIVE.st.failCount++;if(LIVE.st.failCount>=2){if(!LIVE._skip)LIVE._skip=4;
@@ -177,13 +188,20 @@ const DECOF=g=>g===0.1?1:(g===0.01?2:0);
    read_template_block) and the UI is responsible for combining 32-bit spans,
    extracting bit-mapped points and applying sign. Emits per-address
    {raws,ok,reasons} so a span32/bit point collapses to ONE composed value
-   rather than being certified as a bare high word or a shared register.  MG */
-LIVE.composePoint=function(p,values){
+   rather than being certified as a bare high word or a shared register.
+   `preTyped` is set by the TOP Server / IoT-Gateway path, where the gateway has
+   already merged the two registers of a 32-bit span into a single typed tag
+   value (bit-mapped points are provisioned as raw Words there, so their bit is
+   still extracted below exactly as on the Agent path).  MG */
+LIVE.composePoint=function(p,values,preTyped){
   const o={raws:[],ok:[],reasons:[]};
   const order=(p.wordOrder||'hilo').toLowerCase();
   const rt=(p.regType||'').toLowerCase();
   (p.addrs||[]).forEach((a,i)=>{
     if(p.span32){
+      if(preTyped){                                     // gateway already combined + typed the span into one tag value
+        const v=values[String(a)];const okv=v!=null;
+        o.raws[i]=okv?v:null;o.ok[i]=okv;o.reasons[i]=okv?'':'no data';return;}
       const w0=values[String(a)],w1=values[String(a+1)];
       if(w0==null||w1==null){                          // second word never arrived → not trustworthy
         o.raws[i]=null;o.ok[i]=false;

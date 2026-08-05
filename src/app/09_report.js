@@ -47,7 +47,18 @@ function paperHTML(R){
     <td class="${p.status==='OPEN'?'D':'P'}">${p.status}</td></tr>`).join('');
   const passN=R.p2p.filter(r=>r.res==='PASS').length, devN=R.p2p.filter(r=>r.res==='DEV').length,
         naN=R.p2p.filter(r=>r.res==='NA'||r.res==='DEFER').length, failN=R.p2p.filter(r=>r.res==='FAIL').length;
+  /* CERT-3: derive the comms/quality check from the actual reads — never emit a fixed PASS. */
+  const readable=R.p2p.filter(r=>r.res!=='NA'&&r.res!=='DEFER');
+  const goodQN=readable.filter(r=>/192/.test(String(r.q))).length;
+  const commsOK=readable.length>0&&goodQN===readable.length;
   return `<div class="paper">
+    <style>
+    /* UX-7: give the contenteditable signature/engineer fields a real affordance + focus ring */
+    .paper [contenteditable]{border-bottom:1px dashed #9ca3af;border-radius:2px;padding:0 3px;cursor:text;background:#fffbf5;transition:background .12s}
+    .paper [contenteditable]:hover{background:#fff7ed}
+    .paper [contenteditable]:focus{outline:2px solid #c2410c;outline-offset:1px;background:#fff}
+    @media print{.paper [contenteditable]{border-bottom-color:transparent;background:none;outline:none;padding:0}}
+    </style>
     <div style="display:flex;justify-content:space-between;align-items:flex-start">
       <div>
         <span class="eqxr">EQUINIX</span> <span style="color:#6b7280;font-size:10px;letter-spacing:2px">COMMISSIONING</span>
@@ -85,7 +96,7 @@ function paperHTML(R){
       <tr><td>Instrument / sensor calibration certificates current for metered points</td><td contenteditable="true">—</td></tr>
       <tr><td>Mechanical / electrical integrity witnessed per the asset's acceptance checklist</td><td contenteditable="true">—</td></tr>
       <tr><td>Electrical safety: supply, earthing, protective devices verified</td><td contenteditable="true">—</td></tr>
-      <tr><td>Comms established: Modbus TCP session · ${R.p2p.length} tags · OPC quality GOOD (192)</td><td class="P">PASS</td></tr></table>
+      <tr><td>Comms established: Modbus TCP session · ${readable.length} tags read · ${goodQN}/${readable.length} OPC quality GOOD (192)</td><td class="${commsOK?'P':(readable.length?'D':'')}">${commsOK?'PASS':(readable.length?goodQN+'/'+readable.length+' GOOD':'—')}</td></tr></table>
 
     <h2>3 · Point-to-point verification — ${esc(R.meta['Equinix Point List Version:'])} (${R.p2p.length} points)</h2>
     <div style="font-size:10.5px;color:#374151;margin-bottom:4px">Summary: <b class="P">${passN} PASS</b> · <b class="D">${devN} approved deviations</b> · <b class="N">${naN} N/A / deferred</b> · <b class="F">${failN} FAIL</b></div>
@@ -114,6 +125,7 @@ function paperHTML(R){
       <div class="box"><b>Commissioning Agent (CxA)</b><span contenteditable="true">Name · Equinix Cx</span><br>Signature / date: ____________</div>
       <div class="box"><b>Owner / GC Representative</b><span contenteditable="true">Name · Equinix</span><br>Signature / date: ____________</div>
     </div>
+    <div style="font-size:9px;color:#9ca3af;margin-top:4px">✎ Dashed fields are editable — click a name (or the test engineer / section 2 result cells) to type it before printing or export.</div>
 
     <div class="foot">
       <span>References: ASHRAE Gl 0 &amp; 1.1 · ASHRAE 127-2020 (CDU rating) · OCP L2L CDU Test Methodology · Vertiv SL-71308 / SL-70619</span>

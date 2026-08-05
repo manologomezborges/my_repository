@@ -8,6 +8,38 @@ const $=id=>document.getElementById(id);
 const DB=window.SPL_DB, PTS=DB.points;
 let steps=[], chart={series:[],max:240,label:''}, abortFlag=false;
 
+/* ---------- declared-range semantics (DATA-6) ----------
+   A point's min/max are interpreted as INCLUSIVE ENGINEERING-UNIT limits on the
+   gain-scaled reading (the same value shown on the detail card and stored in
+   r.vals), NOT raw register counts. The range is only ASSERTED for the PASS/FAIL
+   check when it is a real, satisfiable engineering band. Otherwise it is treated
+   as NOT ASSERTED — the range check is skipped, which is neither a silent PASS
+   nor a silent FAIL — because the declared numbers cannot express a meaningful
+   limit. A range is NOT asserted when any of these hold:
+     • min or max absent;
+     • min >= max  (inverted or zero-width — impossible to satisfy / meaningless);
+     • the band covers the whole raw register datatype (min<=0 AND max>= the
+       datatype ceiling: 65535 for 16-bit, 4294967295 for 32-bit). That is a raw
+       datatype range mistakenly stored as an engineering limit — it certifies
+       every possible reading and so asserts nothing.
+   Points that fall through to NOT ASSERTED need real engineering limits
+   normalised into the pointslist JSON later (owned by the data agent); until then
+   the check is suppressed rather than allowed to vacuously PASS or spuriously
+   FAIL a garbage/shorted transducer. */
+const RAW_CEIL={16:65535,32:4294967295};
+function rangeAsserted(p){
+  if(p==null||p.min==null||p.max==null)return false;
+  if(!(p.max>p.min))return false;                        // inverted / zero-width → unsatisfiable or meaningless
+  const ceil=p.span32?RAW_CEIL[32]:RAW_CEIL[16];         // raw datatype span stored as an eng limit → vacuous
+  if(p.min<=0&&p.max>=ceil)return false;
+  return true;
+}
+function evalRange(p,vals){
+  // 'na' → range not asserted · 'in' → within declared band · 'out' → outside
+  if(!vals||!rangeAsserted(p))return 'na';
+  return vals.every(v=>v>=p.min-1e-9&&v<=p.max+1e-9)?'in':'out';
+}
+
 /* ---------- sim-time helpers ---------- */
 function onTickOnce(fn){const h=s=>{SIM._l.tick.splice(SIM._l.tick.indexOf(h),1);fn(s);};SIM.on('tick',h);}
 function waitSim(secs){return new Promise(res=>{let acc=0;const h=()=>{acc+=SIM.pollMs/1000*SIM.speed;
@@ -70,10 +102,10 @@ const TESTS=[
     else if(!(p.addrs&&p.addrs.length)||(r.q&&r.q.code===null)){
       res='DEFER';note='DCOS / software point — no Modbus register; verify at L4 BMS integration';na++;}
     else{
-      const inRange = r.vals==null || p.min==null || r.vals.every(v=>v>=p.min-1e-9&&v<=p.max+1e-9);
+      const rng = evalRange(p,r.vals);                                 // DATA-6: engineering-unit range check
       const qOK=r.q.code===192;
       if(!qOK){res='FAIL';note='Quality '+r.q.txt;}                    // comms/quality fault = hard fail
-      else if(!inRange){res='DEV';dev++;note='Observation — value outside declared range; verify range/scale';}
+      else if(rng==='out'){res='DEV';dev++;note='Observation — value outside declared range; verify range/scale';}
       else if(p.compliance==='Deviation'){res='DEV';dev++;note='Approved SPL deviation — '+(p.vendorComment||'').split('\n')[0];}
       else{res='PASS';pass++;}
     }
@@ -405,13 +437,13 @@ function wTick(){
 FWT.baseResults=function(){
   const rows=DB.points.map(p=>{const r=RD(p.id);
     let res='PASS',note='';
-    // same range test FWT01 applies — gain-scaled value must sit inside declared min/max
-    const inRange = !(r&&r.vals) || p.min==null || r.vals.every(v=>v>=p.min-1e-9&&v<=p.max+1e-9);
+    // same range test FWT01 applies — gain-scaled value must sit inside declared min/max (DATA-6 semantics)
+    const rng = evalRange(p, r&&r.vals);
     if(r&&r.custom&&!r.vals){res='NA';note='Field-added — verify live';}
     else if(r&&r.na){res='NA';note=r.note||'';}
     else if(p.id==='P01'){res='DEFER';note='DCOS software point';}
     else if(!(r&&r.q&&r.q.code===192)){res='FAIL';note=r&&r.q?r.q.txt:'no read';}
-    else if(!inRange){res='DEV';note='Observation — value outside declared range; verify range/scale';}
+    else if(rng==='out'){res='DEV';note='Observation — value outside declared range; verify range/scale';}
     else if(p.compliance==='Deviation'){res='DEV';note='Approved SPL deviation';}
     return {id:p.id,name:p.name,addr:p.addrRaw?p.addrRaw.replace(/\n/g,', '):'—',
       raw:r&&r.raws?r.raws.join('/'):'—',val:r?r.txt:'—',units:p.units||'',q:r&&r.q?r.q.txt:'—',res,note};});

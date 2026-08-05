@@ -5,9 +5,14 @@ const UI = window.UI = {};
 const $=id=>document.getElementById(id);
 /* SEC-2: HTML-escape registry/pointslist-derived strings before they reach innerHTML */
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-/* UX-3: make a mouse-only element keyboard-operable (focusable + Enter/Space) */
-function a11yClick(el,fn){el.tabIndex=0;el.setAttribute('role','button');
-  el.onclick=fn;el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fn();}};}
+/* UX-3: make a mouse-only element keyboard-operable (focusable, labelled, Enter/Space, visible focus) */
+function a11yClick(el,fn,label){el.tabIndex=0;el.setAttribute('role','button');
+  if(label)el.setAttribute('aria-label',label);
+  el.onclick=fn;el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fn();}};
+  /* 01_head.html's :focus-visible ring only matches button/select/input, so ring these inline */
+  el.addEventListener('focus',()=>{let fv=true;try{fv=el.matches(':focus-visible');}catch(_){}
+    if(fv){el.style.outline='2px solid var(--acc)';el.style.outlineOffset='2px';}});
+  el.addEventListener('blur',()=>{el.style.outline='';el.style.outlineOffset='';});}
 const DB=window.SPL_DB; const PTS=DB.points; const byId={}; PTS.forEach(p=>byId[p.id]=p);
 const C={teal:'#2ec9de',tealD:'#0894a8',orange:'#e8620c',orangeH:'#ff9a4d',indigo:'#7e7bf2',
   txt:'#e8eaf0',txt2:'#9aa3b2',txt3:'#5b6472',good:'#34d399',warn:'#fbbf24',crit:'#f87171'};
@@ -86,14 +91,14 @@ function buildGenericTiles(){
       <div class="val num"><span id="tv_${p.id}">—</span><small>${esc(p.units||'')}</small></div>
       <div class="sub"><span id="tsub_${p.id}"></span></div>
       <canvas id="tsp_${p.id}" width="76" height="30" style="width:76px;height:30px"></canvas>`;
-    a11yClick(d,()=>UI.selectPoint(p.id));host.appendChild(d);});
+    a11yClick(d,()=>UI.selectPoint(p.id),'Select point '+p.name);host.appendChild(d);});
   if(digital.length){grp(`Status & alarms — ${digital.length} points`,C.orange);
     digital.slice(0,6).forEach(p=>{GEN_TILES.push({id:p.id,col:C.orange,unit:'',digital:true});
       const d=document.createElement('div');d.className='tile';d.id='tile_'+p.id;
       d.innerHTML=`<div class="tl"><span class="name">${esc(p.name)}</span></div>
         <div class="val num" style="font-size:14px"><span id="tv_${p.id}">—</span></div>
         <div class="sub"><span id="tsub_${p.id}">${esc(p.addrRaw||'')}</span></div>`;
-      a11yClick(d,()=>UI.selectPoint(p.id));host.appendChild(d);});}
+      a11yClick(d,()=>UI.selectPoint(p.id),'Select point '+p.name);host.appendChild(d);});}
 }
 function updGenericTiles(){
   GEN_TILES.forEach(t=>{const r=SIM.read(t.id);const el=$('tile_'+t.id);
@@ -113,7 +118,7 @@ function buildTiles(){
       <div class="val num"><span id="tv_${t.id}">—</span><small>${t.unit}</small></div>
       <div class="sub"><span id="tsub_${t.id}"></span></div>
       ${t.hk?`<canvas id="tsp_${t.id}" width="76" height="30" style="width:76px;height:30px"></canvas>`:''}`;
-    a11yClick(d,()=>UI.selectPoint(t.pt));
+    a11yClick(d,()=>UI.selectPoint(t.pt),'Select point '+t.lab);
     host.appendChild(d);});
 }
 function updTiles(s){
@@ -191,7 +196,7 @@ function buildTable(){
     tr.innerHTML=`<td class="nm" title="${esc(p.vendorName||'')}"><span class="q" id="q_${p.id}" style="margin-right:7px"></span>${esc(p.name)}${p.rw==='RW'?'<span class="badge rw">RW</span>':''}${dev?'<span class="badge dev">DEV</span>':''}${p.custom?'<span class="badge dev">NEW</span>':''}${na?'<span class="badge na">N/A</span>':''}</td>
       <td class="addr">${esc(fmtAddr(p))}</td>
       <td class="v num"><span id="pv_${p.id}">—</span>${p.units?`<small>${esc(p.units)}</small>`:''}</td>`;
-    a11yClick(tr,()=>UI.selectPoint(p.id));
+    a11yClick(tr,()=>UI.selectPoint(p.id),'Select point '+p.name);
     tb.appendChild(tr);});
   $('ptCount').textContent=PTS.length;
   $('ptSearch').oninput=e=>{const q=e.target.value.toLowerCase();
