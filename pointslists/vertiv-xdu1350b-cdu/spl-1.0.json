@@ -1,0 +1,1347 @@
+{
+ "schema": "witnessone.pointslist/2",
+ "revId": "spl-1.0",
+ "device": "vertiv-xdu1350b-cdu",
+ "splVersion": "SPL 1.0",
+ "status": "approved",
+ "appliesToFw": [
+  "1.0b19",
+  "1.0b17"
+ ],
+ "approvedBy": "MG",
+ "approvedDate": "2026-07-23",
+ "basedOn": null,
+ "spl": {
+  "meta": {
+   "Equinix Point List Version:": "SPL 1.0",
+   "Equipment": "CDU",
+   "Make": "VERTIV",
+   "Model": "XDU1350B [DO00004-10 Iss B]",
+   "Firmware Version": "1.0b17, 1.0b19",
+   "Asset Compliance Status": "Compliant & Deviations"
+  },
+  "revlog": [
+   {
+    "rev": "v4.18",
+    "reason": "New CDU Points List",
+    "date": "2024-01-22",
+    "by": "J Basler"
+   },
+   {
+    "rev": "SPL v1.0",
+    "reason": "SPL v1.0 Alignment",
+    "date": "2026-01-07",
+    "by": "Mike & Bala"
+   }
+  ],
+  "points": [
+   {
+    "id": "P01",
+    "name": "Communication Alarm",
+    "vendorName": "N/A",
+    "vendorNames": [],
+    "cls": "BV",
+    "clsFlag": "DCOS",
+    "stateTable": "NORMAL_ALARM",
+    "cov": "x",
+    "rw": "R",
+    "custVisible": "No",
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": true,
+    "suppressIf": null,
+    "severity": "Inform",
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Compliant",
+    "addrRaw": null,
+    "addrs": [],
+    "regOffsets": [],
+    "count": "N/A",
+    "bitMask": "N/A",
+    "regType": "N/A",
+    "signed": "N/A",
+    "readFC": "N/A",
+    "writeFC": "N/A",
+    "units": null,
+    "min": null,
+    "max": null,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": null,
+    "offset": null,
+    "equinixComment": null,
+    "vendorComment": null
+   },
+   {
+    "id": "P02",
+    "name": "Unit Status",
+    "vendorName": "Mode:",
+    "vendorNames": [
+     "Mode:"
+    ],
+    "cls": "BV",
+    "clsFlag": "A",
+    "stateTable": "OFF_ON",
+    "cov": "x",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": true,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Deviation",
+    "addrRaw": "30001",
+    "addrs": [
+     30001
+    ],
+    "regOffsets": [
+     "1"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "16int",
+    "signed": "Unsigned",
+    "readFC": "04",
+    "writeFC": "N/A",
+    "units": null,
+    "min": null,
+    "max": null,
+    "status0": null,
+    "status1": null,
+    "floatStatus": "0 = not configured\n1 = tank filling\n2 = shutdown - network\n3 = full manual control\n4 = standby\n5 = online (running)\n6 = online (filling)\n7 = filling\n8 = shutdown \u2013 fault\n9 = group standby\n10 = not used\n11 = not used\n12 = tank filling",
+    "gain": null,
+    "offset": null,
+    "equinixComment": "Deviation Approved",
+    "vendorComment": "Deviation - Only available as mutivalue point\nEQX to determine which status values to use"
+   },
+   {
+    "id": "P03",
+    "name": "VFD Speed Command",
+    "vendorName": "Pump 1 Speed\nPump 2 Speed\nPump 3 Speed",
+    "vendorNames": [
+     "Pump 1 Speed",
+     "Pump 2 Speed",
+     "Pump 3 Speed"
+    ],
+    "cls": "AV",
+    "clsFlag": "A",
+    "stateTable": null,
+    "cov": "1",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Deviation",
+    "addrRaw": "30003\n30004\n30005",
+    "addrs": [
+     30003,
+     30004,
+     30005
+    ],
+    "regOffsets": [
+     "3",
+     "4",
+     "5"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "16int",
+    "signed": "Unsigned",
+    "readFC": "04",
+    "writeFC": "N/A",
+    "units": "%",
+    "min": 0,
+    "max": 100,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": 1,
+    "offset": null,
+    "equinixComment": "Deviation Approved",
+    "vendorComment": "Deviation - 3 points not 1 singular point"
+   },
+   {
+    "id": "P04",
+    "name": "Secondary Supply Temperature Setpoint",
+    "vendorName": "Secondary Temperature Setpoint (P301)",
+    "vendorNames": [
+     "Secondary Temperature Setpoint (P301)"
+    ],
+    "cls": "AV",
+    "clsFlag": "A",
+    "stateTable": null,
+    "cov": "1",
+    "rw": "RW",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Compliant",
+    "addrRaw": "40001",
+    "addrs": [
+     40001
+    ],
+    "regOffsets": [
+     "1"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "16int",
+    "signed": "Unsigned",
+    "readFC": "03",
+    "writeFC": "06",
+    "units": "oC",
+    "min": 10,
+    "max": 55,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": 0.1,
+    "offset": null,
+    "equinixComment": null,
+    "vendorComment": "Note: If DEW Point Control ACTIVE, unit controller will overwrite setpoint accordingly"
+   },
+   {
+    "id": "P05",
+    "name": "Primary Control Valve Position",
+    "vendorName": "Control Valve 1 Feedback\nControl Valve 2 Feedback",
+    "vendorNames": [
+     "Control Valve 1 Feedback",
+     "Control Valve 2 Feedback"
+    ],
+    "cls": "AV",
+    "clsFlag": "A",
+    "stateTable": null,
+    "cov": "1",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Deviation",
+    "addrRaw": "30008\n30010",
+    "addrs": [
+     30008,
+     30010
+    ],
+    "regOffsets": [
+     "8",
+     "10"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "16int",
+    "signed": "Unsigned",
+    "readFC": "04",
+    "writeFC": "N/A",
+    "units": "%",
+    "min": 0,
+    "max": 100,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": 1,
+    "offset": null,
+    "equinixComment": "Deviation Approved",
+    "vendorComment": "Deviation - 2 points not 1 singular point"
+   },
+   {
+    "id": "P06",
+    "name": "Primary Supply Air Temperature",
+    "vendorName": "Primary Supply Temperature T1",
+    "vendorNames": [
+     "Primary Supply Temperature T1"
+    ],
+    "cls": "AV",
+    "clsFlag": "A",
+    "stateTable": null,
+    "cov": "1",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Compliant",
+    "addrRaw": "30011",
+    "addrs": [
+     30011
+    ],
+    "regOffsets": [
+     "11"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "16int",
+    "signed": "Signed",
+    "readFC": "04",
+    "writeFC": "N/A",
+    "units": "oC",
+    "min": -5,
+    "max": 70,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": 0.1,
+    "offset": null,
+    "equinixComment": null,
+    "vendorComment": null
+   },
+   {
+    "id": "P07",
+    "name": "Primary Return Air Temperature",
+    "vendorName": "Primary Return Temperature T5",
+    "vendorNames": [
+     "Primary Return Temperature T5"
+    ],
+    "cls": "AV",
+    "clsFlag": "A",
+    "stateTable": null,
+    "cov": "1",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Compliant",
+    "addrRaw": "30020",
+    "addrs": [
+     30020
+    ],
+    "regOffsets": [
+     "20"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "16int",
+    "signed": "Signed",
+    "readFC": "04",
+    "writeFC": "N/A",
+    "units": "oC",
+    "min": -5,
+    "max": 70,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": 0.1,
+    "offset": null,
+    "equinixComment": null,
+    "vendorComment": null
+   },
+   {
+    "id": "P08",
+    "name": "Secondary Supply Air Temperature",
+    "vendorName": "Secondary Supply Temperature T2",
+    "vendorNames": [
+     "Secondary Supply Temperature T2"
+    ],
+    "cls": "AV",
+    "clsFlag": "A",
+    "stateTable": null,
+    "cov": "1",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": 2,
+     "H": 1,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Compliant",
+    "addrRaw": "30015",
+    "addrs": [
+     30015
+    ],
+    "regOffsets": [
+     "15"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "16int",
+    "signed": "Signed",
+    "readFC": "04",
+    "writeFC": "N/A",
+    "units": "oC",
+    "min": -5,
+    "max": 70,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": 0.1,
+    "offset": null,
+    "equinixComment": null,
+    "vendorComment": "Note: (This point is the AVG. of Sensors T2a,b & c)"
+   },
+   {
+    "id": "P09",
+    "name": "Secondary Return Air Temperature",
+    "vendorName": "Secondary Return Temperature T4",
+    "vendorNames": [
+     "Secondary Return Temperature T4"
+    ],
+    "cls": "AV",
+    "clsFlag": "A",
+    "stateTable": null,
+    "cov": "1",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Compliant",
+    "addrRaw": "30019",
+    "addrs": [
+     30019
+    ],
+    "regOffsets": [
+     "19"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "16int",
+    "signed": "Signed",
+    "readFC": "04",
+    "writeFC": "N/A",
+    "units": "oC",
+    "min": -5,
+    "max": 70,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": 0.1,
+    "offset": null,
+    "equinixComment": null,
+    "vendorComment": null
+   },
+   {
+    "id": "P10",
+    "name": "Primary Supply Pressure",
+    "vendorName": "Primary Inlet/Filter Inlet Pressure PS3",
+    "vendorNames": [
+     "Primary Inlet/Filter Inlet Pressure PS3"
+    ],
+    "cls": "AV",
+    "clsFlag": "A",
+    "stateTable": null,
+    "cov": "1",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Compliant",
+    "addrRaw": "30028",
+    "addrs": [
+     30028
+    ],
+    "regOffsets": [
+     "28"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "16int",
+    "signed": "Signed",
+    "readFC": "04",
+    "writeFC": "N/A",
+    "units": "Bar",
+    "min": -1,
+    "max": 8,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": 0.01,
+    "offset": null,
+    "equinixComment": null,
+    "vendorComment": null
+   },
+   {
+    "id": "P11",
+    "name": "Primary Return Pressure",
+    "vendorName": "Primary Outlet /Filter Outlet Pressure PS4",
+    "vendorNames": [
+     "Primary Outlet /Filter Outlet Pressure PS4"
+    ],
+    "cls": "AV",
+    "clsFlag": "A",
+    "stateTable": null,
+    "cov": "1",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Compliant",
+    "addrRaw": "30029",
+    "addrs": [
+     30029
+    ],
+    "regOffsets": [
+     "29"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "16int",
+    "signed": "Signed",
+    "readFC": "04",
+    "writeFC": "N/A",
+    "units": "Bar",
+    "min": -1,
+    "max": 8,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": 0.01,
+    "offset": null,
+    "equinixComment": null,
+    "vendorComment": null
+   },
+   {
+    "id": "P12",
+    "name": "Secondary Supply Pressure",
+    "vendorName": "Secondary Supply Pressure PS2",
+    "vendorNames": [
+     "Secondary Supply Pressure PS2"
+    ],
+    "cls": "AV",
+    "clsFlag": "A",
+    "stateTable": null,
+    "cov": "1",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Compliant",
+    "addrRaw": "30026",
+    "addrs": [
+     30026
+    ],
+    "regOffsets": [
+     "26"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "16int",
+    "signed": "Signed",
+    "readFC": "04",
+    "writeFC": "N/A",
+    "units": "Bar",
+    "min": -1,
+    "max": 8,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": 0.01,
+    "offset": null,
+    "equinixComment": null,
+    "vendorComment": null
+   },
+   {
+    "id": "P13",
+    "name": "Secondary Return Pressure",
+    "vendorName": "Secondary Return Pressure PS1",
+    "vendorNames": [
+     "Secondary Return Pressure PS1"
+    ],
+    "cls": "AV",
+    "clsFlag": "A",
+    "stateTable": null,
+    "cov": "1",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Compliant",
+    "addrRaw": "30023",
+    "addrs": [
+     30023
+    ],
+    "regOffsets": [
+     "23"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "16int",
+    "signed": "Signed",
+    "readFC": "04",
+    "writeFC": "N/A",
+    "units": "Bar",
+    "min": -1,
+    "max": 8,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": 0.01,
+    "offset": null,
+    "equinixComment": null,
+    "vendorComment": null
+   },
+   {
+    "id": "P14",
+    "name": "Primary Air Flow Rate",
+    "vendorName": "Primary Flow Rate",
+    "vendorNames": [
+     "Primary Flow Rate"
+    ],
+    "cls": "AV",
+    "clsFlag": "A",
+    "stateTable": null,
+    "cov": "1",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Compliant",
+    "addrRaw": "30031",
+    "addrs": [
+     30031
+    ],
+    "regOffsets": [
+     "31"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "16int",
+    "signed": "Unsigned",
+    "readFC": "04",
+    "writeFC": "N/A",
+    "units": "L/m",
+    "min": 0,
+    "max": 1725,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": 1,
+    "offset": null,
+    "equinixComment": null,
+    "vendorComment": null
+   },
+   {
+    "id": "P15",
+    "name": "Secondary Air Flow Rate",
+    "vendorName": "Secondary Flow Rate",
+    "vendorNames": [
+     "Secondary Flow Rate"
+    ],
+    "cls": "AV",
+    "clsFlag": "A",
+    "stateTable": null,
+    "cov": "1",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Compliant",
+    "addrRaw": "30032",
+    "addrs": [
+     30032
+    ],
+    "regOffsets": [
+     "32"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "16int",
+    "signed": "Unsigned",
+    "readFC": "04",
+    "writeFC": "N/A",
+    "units": "L/m",
+    "min": 0,
+    "max": 1725,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": 1,
+    "offset": null,
+    "equinixComment": null,
+    "vendorComment": null
+   },
+   {
+    "id": "P16",
+    "name": "Primary Filter Differential Pressure",
+    "vendorName": "N/A",
+    "vendorNames": [],
+    "cls": "AV",
+    "clsFlag": "A",
+    "stateTable": null,
+    "cov": "1",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": 4,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Compliant",
+    "addrRaw": null,
+    "addrs": [],
+    "regOffsets": [],
+    "count": "N/A",
+    "bitMask": "N/A",
+    "regType": "N/A",
+    "signed": "N/A",
+    "readFC": "N/A",
+    "writeFC": "N/A",
+    "units": null,
+    "min": null,
+    "max": null,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": null,
+    "offset": null,
+    "equinixComment": null,
+    "vendorComment": "NO PRI FILTER inside XDU1350B STD"
+   },
+   {
+    "id": "P17",
+    "name": "Secondary Filter Differential Pressure",
+    "vendorName": "Secondary Filter 1 Differential Pressure (PS5a \u2013 PS2)\nSecondary Filter 2 Differential Pressure (PS5b \u2013 PS2)\nSecondary Filter 3 Differential Pressure (PS5c \u2013 PS2)",
+    "vendorNames": [
+     "Secondary Filter 1 Differential Pressure (PS5a \u2013 PS2)",
+     "Secondary Filter 2 Differential Pressure (PS5b \u2013 PS2)",
+     "Secondary Filter 3 Differential Pressure (PS5c \u2013 PS2)"
+    ],
+    "cls": "AV",
+    "clsFlag": "A",
+    "stateTable": null,
+    "cov": "1",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": 3,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Deviation",
+    "addrRaw": "30041\n30042\n30043",
+    "addrs": [
+     30041,
+     30042,
+     30043
+    ],
+    "regOffsets": [
+     "41",
+     "42",
+     "43"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "16int",
+    "signed": "Signed",
+    "readFC": "04",
+    "writeFC": "N/A",
+    "units": "Bar",
+    "min": -1,
+    "max": 8,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": 0.01,
+    "offset": null,
+    "equinixComment": "Deviation Approved",
+    "vendorComment": "Deviation - 3 points not 1 singular point"
+   },
+   {
+    "id": "P18",
+    "name": "Pump Differential Pressure",
+    "vendorName": "Secondary Differential Pressure (PS2 \u2013 PS1)",
+    "vendorNames": [
+     "Secondary Differential Pressure (PS2 \u2013 PS1)"
+    ],
+    "cls": "AV",
+    "clsFlag": "A",
+    "stateTable": null,
+    "cov": "1",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Deviation",
+    "addrRaw": "30027",
+    "addrs": [
+     30027
+    ],
+    "regOffsets": [
+     "27"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "16int",
+    "signed": "Signed",
+    "readFC": "04",
+    "writeFC": "N/A",
+    "units": "Bar",
+    "min": -1,
+    "max": 8,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": 0.01,
+    "offset": null,
+    "equinixComment": "Deviation Approved",
+    "vendorComment": "Deviation - See unit schematic for clarity"
+   },
+   {
+    "id": "P19",
+    "name": "General Alarm",
+    "vendorName": "Critical Alarm \nNon-Critical Alarm",
+    "vendorNames": [
+     "Critical Alarm",
+     "Non-Critical Alarm"
+    ],
+    "cls": "BV",
+    "clsFlag": "A",
+    "stateTable": "NORMAL_ALARM",
+    "cov": "x",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": true,
+    "suppressIf": null,
+    "severity": "High",
+    "notifyEng": true,
+    "eoc": null,
+    "compliance": "Deviation",
+    "addrRaw": "10001\n10002",
+    "addrs": [
+     10001,
+     10002
+    ],
+    "regOffsets": [
+     "1",
+     "2"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "Boolean",
+    "signed": "Discrete Input",
+    "readFC": "02",
+    "writeFC": "N/A",
+    "units": null,
+    "min": null,
+    "max": null,
+    "status0": "0 = Inactive",
+    "status1": "1 = Active",
+    "floatStatus": null,
+    "gain": null,
+    "offset": null,
+    "equinixComment": "Deviation Approved",
+    "vendorComment": "Deviation - 2 points not 1 singular point"
+   },
+   {
+    "id": "P20",
+    "name": "Pump A Low Flow Alarm",
+    "vendorName": "Alarm : Low Flow",
+    "vendorNames": [
+     "Alarm : Low Flow"
+    ],
+    "cls": "BV",
+    "clsFlag": "A",
+    "stateTable": "NORMAL_ALARM",
+    "cov": "x",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": true,
+    "suppressIf": null,
+    "severity": "High",
+    "notifyEng": true,
+    "eoc": null,
+    "compliance": "Compliant",
+    "addrRaw": "10029",
+    "addrs": [
+     10029
+    ],
+    "regOffsets": [
+     "29"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "Boolean",
+    "signed": "Discrete Input",
+    "readFC": "02",
+    "writeFC": "N/A",
+    "units": null,
+    "min": null,
+    "max": null,
+    "status0": "0 = Inactive",
+    "status1": "1 = Active",
+    "floatStatus": null,
+    "gain": null,
+    "offset": null,
+    "equinixComment": null,
+    "vendorComment": "Note - Active when all active pumps @ 100% but not achieving 80% of DP or Flow  Setpoint"
+   },
+   {
+    "id": "P21",
+    "name": "Pump B Low Flow Alarm",
+    "vendorName": "N/A",
+    "vendorNames": [],
+    "cls": "BV",
+    "clsFlag": "A",
+    "stateTable": "NORMAL_ALARM",
+    "cov": "x",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": true,
+    "suppressIf": null,
+    "severity": "High",
+    "notifyEng": true,
+    "eoc": null,
+    "compliance": "Compliant",
+    "addrRaw": null,
+    "addrs": [],
+    "regOffsets": [],
+    "count": "N/A",
+    "bitMask": "N/A",
+    "regType": "N/A",
+    "signed": "N/A",
+    "readFC": "N/A",
+    "writeFC": "N/A",
+    "units": null,
+    "min": null,
+    "max": null,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": null,
+    "offset": null,
+    "equinixComment": null,
+    "vendorComment": "^SEE ABOVE DUE TO 3 PUMPS"
+   },
+   {
+    "id": "P22",
+    "name": "Flowmeter Alarm",
+    "vendorName": "Alarm : Secondary Flow Meter Sensor Fault\nAlarm : Primary Flow Meter Sensor Fault",
+    "vendorNames": [
+     "Alarm : Secondary Flow Meter Sensor Fault",
+     "Alarm : Primary Flow Meter Sensor Fault"
+    ],
+    "cls": "BV",
+    "clsFlag": "A",
+    "stateTable": "NORMAL_ALARM",
+    "cov": "x",
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": true,
+    "suppressIf": null,
+    "severity": "Low",
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Deviation",
+    "addrRaw": "10020\n10021",
+    "addrs": [
+     10020,
+     10021
+    ],
+    "regOffsets": [
+     "20",
+     "21"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "Boolean",
+    "signed": "Discrete Input",
+    "readFC": "02",
+    "writeFC": "N/A",
+    "units": null,
+    "min": null,
+    "max": null,
+    "status0": "0 = Inactive",
+    "status1": "1 = Active",
+    "floatStatus": null,
+    "gain": null,
+    "offset": null,
+    "equinixComment": "Deviation Approved",
+    "vendorComment": "MODBUS function code 02 \u2013 Read Input Status\nDEVIATION - CHECK WITH EQX"
+   },
+   {
+    "id": "P23",
+    "name": "PrimaryControlValveCommand",
+    "vendorName": "Control Valve 1 (Cooling) Demand , Control Valve 2 Demand",
+    "vendorNames": [
+     "Control Valve 1 (Cooling) Demand",
+     "Control Valve 2 Demand"
+    ],
+    "cls": "AV",
+    "clsFlag": "A",
+    "stateTable": null,
+    "cov": null,
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Deviation",
+    "addrRaw": "30007, 30009",
+    "addrs": [
+     30007,
+     30009
+    ],
+    "regOffsets": [
+     "7",
+     "9"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "16int",
+    "signed": "Unsigned",
+    "readFC": "04",
+    "writeFC": "N/A",
+    "units": "%",
+    "min": 0,
+    "max": 100,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": 1,
+    "offset": null,
+    "equinixComment": "Deviation Approved",
+    "vendorComment": "Deviation - 2 points not 1 singular point"
+   },
+   {
+    "id": "P24",
+    "name": "Leak Detection Alarm",
+    "vendorName": "Alarm : Leak - Unit",
+    "vendorNames": [
+     "Alarm : Leak - Unit"
+    ],
+    "cls": "BV",
+    "clsFlag": "A",
+    "stateTable": "NORMAL_ALARM",
+    "cov": null,
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Compliant",
+    "addrRaw": "10039",
+    "addrs": [
+     10039
+    ],
+    "regOffsets": [
+     "39"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "Boolean",
+    "signed": "Discrete Input",
+    "readFC": "02",
+    "writeFC": "N/A",
+    "units": null,
+    "min": null,
+    "max": null,
+    "status0": "0 = Inactive",
+    "status1": "1 = Active",
+    "floatStatus": null,
+    "gain": null,
+    "offset": null,
+    "equinixComment": null,
+    "vendorComment": null
+   },
+   {
+    "id": "P25",
+    "name": "Pump Fault Alarm",
+    "vendorName": "Alarm : P1 Inverter Fault , Alarm : P2 Inverter Fault , Alarm : P3 Inverter Fault",
+    "vendorNames": [
+     "Alarm : P1 Inverter Fault",
+     "Alarm : P2 Inverter Fault",
+     "Alarm : P3 Inverter Fault"
+    ],
+    "cls": "BV",
+    "clsFlag": "A",
+    "stateTable": "NORMAL_ALARM",
+    "cov": null,
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Compliant",
+    "addrRaw": "10023, 10024, 10025",
+    "addrs": [
+     10023,
+     10024,
+     10025
+    ],
+    "regOffsets": [
+     "23",
+     "24",
+     "25"
+    ],
+    "count": "1",
+    "bitMask": "N/A",
+    "regType": "Boolean",
+    "signed": "Discrete Input",
+    "readFC": "02",
+    "writeFC": "N/A",
+    "units": null,
+    "min": null,
+    "max": null,
+    "status0": "0 = Inactive",
+    "status1": "1 = Active",
+    "floatStatus": null,
+    "gain": null,
+    "offset": null,
+    "equinixComment": null,
+    "vendorComment": "Provided invertal fault points"
+   },
+   {
+    "id": "P26",
+    "name": "Cooling kW",
+    "vendorName": null,
+    "vendorNames": [],
+    "cls": "AV",
+    "clsFlag": "DCOSC",
+    "stateTable": null,
+    "cov": null,
+    "rw": "R",
+    "custVisible": null,
+    "alarmDev": {
+     "LL": null,
+     "L": null,
+     "H": null,
+     "HH": null
+    },
+    "alarmStatus": false,
+    "suppressIf": null,
+    "severity": null,
+    "notifyEng": false,
+    "eoc": null,
+    "compliance": "Compliant",
+    "addrRaw": null,
+    "addrs": [],
+    "regOffsets": [],
+    "count": null,
+    "bitMask": null,
+    "regType": null,
+    "signed": null,
+    "readFC": null,
+    "writeFC": null,
+    "units": null,
+    "min": null,
+    "max": null,
+    "status0": null,
+    "status1": null,
+    "floatStatus": null,
+    "gain": null,
+    "offset": null,
+    "equinixComment": null,
+    "vendorComment": null
+   }
+  ],
+  "stateTables": {
+   "NORMAL_ALARM": [
+    [
+     0,
+     "NORMAL"
+    ],
+    [
+     1,
+     "ALARM"
+    ]
+   ],
+   "OFF_ON": [
+    [
+     0,
+     "OFF"
+    ],
+    [
+     1,
+     "ON"
+    ]
+   ]
+  },
+  "notes": [
+   "Note 1: Hardwired point must always be provided as such.  Software points may be provided as hardwired where it is cost effective to do so.",
+   "Note 2:  Trend all points by any COV for Wonderware and all other systems which support trending at that resolution.  Use limits here for all other systems."
+  ],
+  "source": "Vertiv CDU Model XDU1350B \u2014 Complete Modbus Points List, SPL 1.0 alignment, Approved v1.0"
+ }
+}

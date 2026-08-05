@@ -1,0 +1,33 @@
+{
+ "schema": "witnessone.device/2",
+ "id": "dx-unit-type3",
+ "class": "DX UNIT",
+ "identity": {
+  "make": "DX UNIT",
+  "model": "Type 3",
+  "modelDoc": "Type 3",
+  "firmwares": [
+   "1.0"
+  ],
+  "defaultUnitId": 1,
+  "defaultPort": 502
+ },
+ "layout": {
+  "threeLayout": "generic-cabinet",
+  "dims_mm": {
+   "w": 1372,
+   "d": 965,
+   "h": 2286
+  },
+  "zones": []
+ },
+ "fwtScript": "GENERIC-P2P",
+ "registry": {
+  "version": "1.1.0",
+  "lastVerified": "2026-07-24",
+  "verifiedBy": "MG",
+  "source": "DX Unit Type 3 points list (EQX/AWS)",
+  "complianceStatus": "Curated"
+ },
+ "defaultPointsList": "eqx-aws-dx-v3.1"
+}

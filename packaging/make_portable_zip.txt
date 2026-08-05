@@ -1,0 +1,25 @@
+WitnessONE Agent - PORTABLE ZIP (zero-install, zero-admin)          MG
+======================================================================
+For laptops where even running an unsigned .exe is blocked, use the
+python.org "embeddable package" - it is just a folder, needs no
+installation and no admin rights.
+
+EASIEST WAY: double-click  make_portable_bundle.bat  (this folder) on
+any online Windows 10/11 PC - it performs every step below and leaves
+a ready-to-copy WitnessONE-Agent-portable\ folder.
+
+Manual steps (same result):
+
+  1. Download "Windows embeddable package (64-bit)" for Python 3.12
+     from https://www.python.org/downloads/windows/   (~11 MB zip)
+  2. Unzip it into a folder called:      WitnessONE-Agent-portable\py\
+  3. Copy into WitnessONE-Agent-portable\ :
+        agent\witnessone_agent.py       (keep the agent\ subfolder)
+        devices\ + pointslists\        (device identities + SPL revisions)
+        dist\WitnessONE.html            (the UI the agent serves)
+        run_agent.bat                   (from this packaging folder)
+  4. Zip WitnessONE-Agent-portable\ and distribute.
+
+On the Cx laptop: unzip anywhere (USB stick works), double-click
+run_agent.bat. The agent is stdlib-only, so the embeddable runtime
+needs no pip and no extra packages.

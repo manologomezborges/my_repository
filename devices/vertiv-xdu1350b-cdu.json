@@ -1,0 +1,38 @@
+{
+ "schema": "witnessone.device/2",
+ "id": "vertiv-xdu1350b-cdu",
+ "class": "CDU",
+ "identity": {
+  "make": "VERTIV",
+  "model": "XDU1350B [DO00004-10 Iss B]",
+  "modelDoc": "DO00004-10 Iss B",
+  "firmwares": [
+   "1.0b19",
+   "1.0b17"
+  ],
+  "defaultUnitId": 1,
+  "defaultPort": 502
+ },
+ "layout": {
+  "threeLayout": "cdu-floor-3pump",
+  "dims_mm": {
+   "w": 900,
+   "d": 1243,
+   "h": 2122
+  },
+  "zones": [
+   "pumps-low",
+   "plate-hx-mid",
+   "expansion-high"
+  ]
+ },
+ "fwtScript": "FWT-CDU-01-R2",
+ "registry": {
+  "version": "1.0.0",
+  "lastVerified": "2026-07-23",
+  "verifiedBy": "MG",
+  "source": "Equinix SPL 1.0 workbook (approved)",
+  "complianceStatus": "Compliant & Deviations"
+ },
+ "defaultPointsList": "spl-1.0"
+}

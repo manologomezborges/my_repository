@@ -1,0 +1,4 @@
+agent/witnessone_records.db
+agent/pending_commits/
+__pycache__/
+*.pyc

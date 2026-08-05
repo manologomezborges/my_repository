@@ -1,0 +1,25 @@
+# GitHub Actions / Gitea Actions workflow — builds WitnessONE-Agent.exe on every tag.
+# Drop into .github/workflows/ once the repo lives in your org's git.   MG
+name: build-agent-exe
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install pyinstaller
+      - run: python build.py
+      - run: >
+          pyinstaller --onefile --console --name WitnessONE
+          --add-data "templates;templates"
+          --add-data "dist/WitnessONE.html;."
+          agent/witnessone_agent.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WitnessONE-exe
+          path: dist/WitnessONE.exe

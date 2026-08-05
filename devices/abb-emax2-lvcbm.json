@@ -1,0 +1,33 @@
+{
+ "schema": "witnessone.device/2",
+ "id": "abb-emax2-lvcbm",
+ "class": "LV BREAKER",
+ "identity": {
+  "make": "ABB",
+  "model": "EMAX2 X.XH (All Current Ratings)",
+  "modelDoc": "EMAX2 X.XH (All Current Ratings)",
+  "firmwares": [
+   "3.XX"
+  ],
+  "defaultUnitId": 1,
+  "defaultPort": 502
+ },
+ "layout": {
+  "threeLayout": "generic-cabinet",
+  "dims_mm": {
+   "w": 414,
+   "d": 400,
+   "h": 444
+  },
+  "zones": []
+ },
+ "fwtScript": "GENERIC-P2P",
+ "registry": {
+  "version": "1.1.0",
+  "lastVerified": "2026-07-24",
+  "verifiedBy": "MG",
+  "source": "ABB LVCBM EMAX2 Complete Modbus Points List Approved 1.0",
+  "complianceStatus": "Compliant"
+ },
+ "defaultPointsList": "4.17"
+}

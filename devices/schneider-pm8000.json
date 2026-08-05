@@ -1,0 +1,33 @@
+{
+ "schema": "witnessone.device/2",
+ "id": "schneider-pm8000",
+ "class": "POWER METER",
+ "identity": {
+  "make": "SCHNEIDER",
+  "model": "PM8000 Series",
+  "modelDoc": "PM8000 Series",
+  "firmwares": [
+   "002.002.001"
+  ],
+  "defaultUnitId": 1,
+  "defaultPort": 502
+ },
+ "layout": {
+  "threeLayout": "panel-meter",
+  "dims_mm": {
+   "w": 96,
+   "d": 77.5,
+   "h": 96
+  },
+  "zones": []
+ },
+ "fwtScript": "GENERIC-P2P",
+ "registry": {
+  "version": "1.1.0",
+  "lastVerified": "2026-07-24",
+  "verifiedBy": "MG",
+  "source": "Schneider PM8000 Modbus Map (curated 27-point metering set)",
+  "complianceStatus": "Curated"
+ },
+ "defaultPointsList": "vendor-map-curated"
+}

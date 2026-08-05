@@ -1,0 +1,391 @@
+<canvas id="gl"></canvas>
+<div id="vignette"></div>
+
+<!-- ============ BOOT / CONNECT ============ -->
+<div id="boot">
+  <div id="bootCard">
+    <div id="bootHead">
+      <div class="logo"><div class="mark">W1</div><div>
+        <div class="word">WITNESS<b>ONE</b></div>
+        <div class="tag">Universal FWT Commissioning Toolbox</div>
+      </div></div>
+      <div class="eqx">EQUINIX<small>COMMISSIONING</small></div>
+    </div>
+    <div id="bootTitle">Plug in. <b>Light it up.</b> Certify.</div>
+    <div id="bootSub">Connect your laptop to any factory-witness-test asset. One tool, every vendor.</div>
+
+    <div class="frow">
+      <div style="flex:2"><label class="f">Equipment IP address</label>
+        <input type="text" id="ip" value="192.168.10.51" spellcheck="false"></div>
+      <div class="w80"><label class="f">Port</label><input type="text" id="port" value="502"></div>
+      <div class="w80"><label class="f">Unit ID</label><input type="text" id="unitId" value="1"></div>
+    </div>
+    <div class="frow">
+      <div><label class="f">Make</label><select id="make"></select></div>
+      <div><label class="f">Model</label><select id="model"></select></div>
+    </div>
+    <div class="frow">
+      <div><label class="f">Firmware version</label><select id="fw"></select></div>
+      <div><label class="f">Points list · SPL revision</label><select id="tpl" title="A device can be witnessed against any published SPL revision — v4.17 … SPL 1.0 — or a field draft"><option>Equinix SPL 1.0 (Approved)</option></select></div>
+    </div>
+
+    <div class="seg" id="modeSeg">
+      <button class="segbtn on" data-m="sim" id="segSim">◉ SIMULATION</button>
+      <button class="segbtn" data-m="live" id="segLive">⛓ LIVE</button>
+    </div>
+    <div id="liveCfg" class="hidden">
+      <label class="f">Link via</label>
+      <div class="seg" id="linkSeg" style="margin:5px 0 10px">
+        <button class="segbtn on" data-lv="modbus" id="lvModbus">🔌 DIRECT MODBUS</button>
+        <button class="segbtn" data-lv="topserver" id="lvTops">🗄 TOP SERVER</button>
+      </div>
+      <div id="lvModbusPane">
+        <div class="lvHint">Talks Modbus TCP <b>straight to the asset</b> at the IP · port · unit above — no middleware, nothing to license. Runs through the WitnessONE Agent on this laptop (auto-detected below). All polling is <b>READ-ONLY</b> until writes are explicitly armed on the bench.</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+          <button class="btn ghost small" id="btnMbTest" title="Read one register from the device right now — instant proof of a real Modbus link">⚡ Test Modbus point</button>
+          <input type="text" id="mbAddr" value="30001" style="width:86px" title="SPL address to read" spellcheck="false">
+          <span id="mbStatus" style="font:600 10.5px var(--mono);color:var(--txt3)">reads ONE register · instant proof</span>
+        </div>
+      </div>
+      <div id="lvTopsPane" class="hidden">
+        <div class="lvHint">Uses the site-standard <b>TOP Server</b> install on this laptop: the tool provisions the channel/device/tags over the Configuration API, and live values ride the IoT Gateway if licensed.</div>
+        <div class="frow">
+          <div style="flex:2"><label class="f">Configuration API URL</label>
+            <input type="text" id="apiUrl" value="http://127.0.0.1:57418" spellcheck="false"></div>
+        </div>
+        <div class="frow">
+          <div><label class="f">User</label><input type="text" id="apiUser" value="Administrator"></div>
+          <div><label class="f">Password</label><input type="password" id="apiPass" value=""></div>
+        </div>
+        <div class="frow">
+          <div style="flex:1.4"><label class="f">IoT Gateway URL · optional — blank = values simulated</label>
+            <input type="text" id="iotUrl" value="" placeholder="https://host:39320" spellcheck="false"></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:2px">
+          <button class="btn ghost small" id="btnApiTest">⚡ Test API</button>
+          <button class="btn ghost small" id="btnExplore" disabled>🗄 Browse server…</button>
+          <span id="apiStatus" style="font:600 10.5px var(--mono);color:var(--txt3)">not tested</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="backendChip">
+      <span class="chip acc"><span class="dot" style="background:var(--acc);box-shadow:0 0 8px var(--acc)"></span>MODBUS TCP/IP ETHERNET</span>
+      <span class="chip">TOP SERVER · OPTIONAL LAYER</span>
+      <span class="chip" id="agentChip"><span class="dot"></span>AGENT · —</span>
+    </div>
+    <div style="margin-top:8px"><button class="linklike" id="btnLibrary">📚 Device library &amp; template registry</button></div>
+
+    <div id="connFoot">
+      <button class="linklike" id="btnDiscover">Points missing / new firmware? → Sweep registers</button>
+      <button class="btn big" id="btnConnect">⚡ CONNECT</button>
+    </div>
+    <div id="bootFoot">Field MVP · 5 asset classes · direct-Modbus first, TOP Server optional · Engineered by <b>MG</b></div>
+  </div>
+</div>
+
+<!-- ============ HANDSHAKE ============ -->
+<div id="handshake" class="hidden">
+  <div id="hsCard">
+    <div id="hsTitle"><span>WITNESSONE LINK SEQUENCER</span><span id="hsStatus">INITIALIZING</span></div>
+    <div id="hsLines"></div>
+    <div id="hsBarWrap"><div id="hsBar"></div></div>
+  </div>
+</div>
+
+<!-- ============ APP SHELL ============ -->
+<div id="app" class="hidden">
+  <div id="topbar">
+    <div class="logo"><div class="mark">W1</div><div>
+      <div class="word" style="font-size:14px">WITNESS<b>ONE</b></div>
+      <div class="tag" style="font-size:8px">FWT CX TOOLBOX</div>
+    </div></div>
+    <div id="devChip">
+      <span class="mm" id="devMM">VERTIV · XDU1350B</span>
+      <span class="ip" id="devIP">192.168.10.51:502</span>
+      <span class="fw" id="devFW">FW 1.0b19</span>
+      <span class="chip ok" id="linkChip"><span class="dot"></span><span id="linkTxt">LINK · GOOD(192)</span></span>
+      <span class="chip hidden" id="safeChip"><span class="dot"></span>READ-ONLY</span>
+    </div>
+    <div class="sep"></div>
+    <button class="btn small" id="btnTest">▶ RUN WITNESS TEST</button>
+    <button class="btn ghost small" id="btnReport" disabled>📜 Certificate</button>
+    <div id="menuWrap" style="position:relative">
+      <button class="btn ghost small" id="btnMenu" aria-haspopup="true" aria-expanded="false" title="Tools & settings">☰ MENU</button>
+      <div id="menuPanel" class="hidden" role="menu">
+        <button class="mitem" id="btnBench" role="menuitem">🧪 Test Bench <span class="mhint">faults · arm writes</span></button>
+        <button class="mitem hidden" id="btnServer" role="menuitem">🗄 TOP Server explorer</button>
+        <div class="msep"></div>
+        <div class="mrow"><span class="mlab">Poll rate</span>
+          <select id="pollSel" title="Poll rate">
+            <option value="500">500 ms</option>
+            <option value="1000" selected>1 s</option>
+            <option value="2000">2 s</option>
+          </select></div>
+        <div class="msep"></div>
+        <button class="mitem" id="btnBack" role="menuitem">⏏ Change asset <span class="mhint">back to connect</span></button>
+        <div class="msep"></div>
+        <button class="mitem" id="btnHelp" role="menuitem">❔ Help — how this works</button>
+        <button class="mitem" id="btnAbout" role="menuitem">ℹ️ About WitnessONE</button>
+      </div>
+    </div>
+    <div class="eqx" style="font-size:13px;margin-left:6px">EQUINIX</div>
+  </div>
+
+  <div id="main">
+    <div class="panel" id="left">
+      <div class="ptitle"><span>Live Telemetry — SPL 1.0</span><span class="chip" id="pollChip"><span class="dot ok"></span><span id="pollTxt">POLL 1 s</span></span></div>
+      <div id="tiles"></div>
+      <div id="trendWrap">
+        <div class="ptitle" style="padding:6px 4px 6px"><span>Supply / Return / Setpoint — °C</span></div>
+        <div style="position:relative"><canvas id="trendChart"></canvas><div id="trendTip"></div></div>
+        <div id="trendLegend">
+          <span class="li"><span class="sw" style="background:var(--s-teal-hi)"></span>Sec Supply T2</span>
+          <span class="li"><span class="sw" style="background:var(--s-orange)"></span>Sec Return T4</span>
+          <span class="li"><span class="sw" style="background:var(--txt3);height:1px;border-top:1px dashed var(--txt2)"></span>Setpoint</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="center">
+      <div id="sceneCtl">
+        <button class="btn ghost small" id="btnXray">◫ X-Ray</button>
+        <button class="btn ghost small" id="btnAuto">⟳ Auto-orbit</button>
+        <button class="btn ghost small" id="btnFocus">◎ Reset view</button>
+      </div>
+      <div id="hudHint">Drag to orbit · Wheel to zoom · Click components to inspect</div>
+    </div>
+
+    <div class="panel" id="right">
+      <div class="ptitle"><span>Modbus Points — <span id="ptCount">26</span> · <span id="rxChip" class="chip ok" style="font-size:9px;padding:2px 8px;margin-left:4px">RX —</span></span>
+        <span style="display:flex;gap:7px;align-items:center"><button class="btn ghost small" id="btnAddReg" style="padding:3px 9px;font-size:10px">＋ REG</button><span class="badge ok">SPL 1.0</span></span></div>
+      <div id="ptSearchWrap"><input type="text" id="ptSearch" placeholder="Filter points… (name, address, alarm)" spellcheck="false"></div>
+      <div id="ptTableWrap"><table class="pts"><thead><tr>
+        <th>Point</th><th>Addr</th><th style="text-align:right">Value</th>
+      </tr></thead><tbody id="ptRows"></tbody></table></div>
+      <div id="ptDetail"><span style="color:var(--txt3)">Select a point or click a 3D component…</span></div>
+    </div>
+  </div>
+
+  <div class="panel" id="bottom">
+    <div class="ptitle"><span>Event Log — data link runtime</span>
+      <span><span class="chip" id="simChipIn"><span class="dot warn"></span>SIMULATED TELEMETRY</span></span></div>
+    <div id="evlog"></div>
+  </div>
+</div>
+
+<!-- ============ TEST BENCH DRAWER ============ -->
+<div id="bench">
+  <h3>Test Bench — Scenario Injection</h3>
+  <div class="row"><div class="rlab"><span>IT Heat Load</span><b class="num" id="loadVal">620 kW</b></div>
+    <input type="range" id="loadSlider" min="0" max="1350" value="620"></div>
+  <div class="row"><div class="rlab"><span>Secondary Setpoint (40001 · RW)</span><b class="num" id="spVal">32.0 °C</b></div>
+    <div id="spRow"><input type="range" id="spSlider" min="10" max="55" step="0.5" value="32">
+      <button class="btn small" id="spApply">WRITE</button></div></div>
+  <div class="row"><div class="rlab"><span>Fault injection <span style="color:var(--txt3);font-weight:500">— SIMULATION ONLY</span></span><span style="color:var(--txt3);font-size:10px">feedback toy · no effect on a real device</span></div>
+    <div id="faultBtns">
+      <button class="fbtn" data-f="leak">💧 Leak detect</button>
+      <button class="fbtn" data-f="p1">P1 inverter fault</button>
+      <button class="fbtn" data-f="p2">P2 inverter fault</button>
+      <button class="fbtn" data-f="p3">P3 inverter fault</button>
+      <button class="fbtn" data-f="fmSec">Sec flowmeter</button>
+      <button class="fbtn" data-f="fmPri">Pri flowmeter</button>
+      <button class="fbtn" data-f="lowflow">Low-flow strainer</button>
+      <button class="fbtn" data-f="comms">📡 Comms loss</button>
+    </div></div>
+  <div class="row"><div class="rlab"><span>Write protection (real device)</span></div>
+    <button class="fbtn" id="btnArmWrites" style="width:100%;text-align:center">🔒 SAFE — writes disabled (click to ARM)</button></div>
+  <div class="row"><div class="rlab"><span>Unit</span></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost small" id="btnUnitOff">⏻ Stop unit</button>
+      <button class="btn ghost small" id="btnClearF">Clear all faults</button>
+    </div></div>
+</div>
+
+<!-- ============ TEST DECK ============ -->
+<div id="testdeck" class="hidden">
+  <div id="tdPanel">
+    <div id="tdHead">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <h2>FACTORY WITNESS TEST — <b>LEVEL 1</b></h2>
+        <button class="xbtn" id="btnTdClose">✕</button>
+      </div>
+      <div id="tdMeta">
+        <span class="chip">SCRIPT FWT-CDU-01-R2</span>
+        <span class="chip">VERTIV XDU1350B</span>
+        <span class="chip">SPL 1.0 · 26 POINTS</span>
+        <span class="chip acc" id="tdSpeedChip">DEMO SPEED ×4</span>
+      </div>
+      <div class="seg" style="margin:12px 0 0">
+        <button class="segbtn on" id="tdModeSim">◉ DEMO SCRIPT · SIMULATED</button>
+        <button class="segbtn" id="tdModeWit">👁 WITNESSED · FIELD EVENTS</button>
+      </div>
+    </div>
+    <div id="tdChartWrap"><div id="tdChartLab">Live measurement</div><canvas id="tdChart"></canvas></div>
+    <div id="tdBody"></div>
+    <div id="tdBodyW" class="hidden" style="flex:1;overflow-y:auto;padding:14px 24px"></div>
+    <div id="tdFoot">
+      <button class="btn" id="btnTdRun">▶ START SEQUENCE</button>
+      <button class="btn ghost" id="btnTdAbort" disabled>■ Abort</button>
+      <div id="tdProg"><div id="tdProgBar"></div></div>
+      <div id="tdCounts">—</div>
+      <button class="btn ghost" id="btnTdReport" disabled>📜 Generate Certificate</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DISCOVERY MODAL ============ -->
+<div id="discModal" class="modal hidden">
+  <div class="mcard" style="width:640px">
+    <div class="mhead"><h2>REGISTER <b>SWEEP</b> — known device</h2><button class="xbtn" id="btnDiscClose">✕</button></div>
+    <div class="mbody">
+      <div id="discLines"></div>
+      <div id="discFound" class="hidden">
+        <div class="chip ok" style="margin:4px 0 10px"><span class="dot"></span><span id="discChipTxt">REGISTER MAP MATCHES TEMPLATE</span></div>
+        <table class="pts"><tbody>
+          <tr><td>Vendor</td><td class="v" id="discMake">VERTIV</td><td>Model</td><td class="v" id="discModel">XDU1350B [DO00004-10 Iss B]</td></tr>
+          <tr><td>Firmware</td><td class="v" id="discFw">1.0b19</td><td>Template</td><td class="v" id="discTpl">Equinix SPL 1.0 — CDU</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+    <div class="mfoot"><button class="btn ghost" id="btnDiscCancel">Cancel</button>
+      <button class="btn" id="btnDiscAdopt" disabled>Adopt & Fill Form</button></div>
+  </div>
+</div>
+
+<!-- ============ ABOUT MODAL ============ -->
+<div id="aboutModal" class="modal hidden">
+  <div class="mcard" style="width:560px">
+    <div class="mhead"><h2>WITNESS<b>ONE</b> · MVP v0.8.2</h2><button class="xbtn" id="btnAboutClose">✕</button></div>
+    <div class="mbody" style="font:12.5px/1.75 var(--sans);color:var(--txt2)">
+      <p><b style="color:var(--txt)">One plug. Every asset. Certified.</b> WitnessONE is the Equinix commissioning toolbox for factory witness tests: plug your laptop into the test network, pick the asset from the device library (or discover it), watch it live in 3D, run the Level-1 script, and walk out with a signed certificate.</p>
+      <p style="margin-top:10px"><b style="color:var(--txt)">This MVP — 5 asset templates:</b> VERTIV XDU1350B CDU · Delta UPS125 · ABB Emax2 LV breaker · DX Unit Type 3 · Schneider PM8000 meter. Each is a versioned JSON template (identity + Equinix points list + 3D layout + test script). Pick one on the connect screen; the twin, tiles, tests &amp; certificate adapt automatically.</p>
+      <p style="margin-top:10px"><b style="color:var(--txt)">Production path:</b> the UI binds to TOP Server v7.1 (Modbus TCP/IP Ethernet driver → OPC UA <span class="mono">opc.tcp://localhost:49380</span>) via its Configuration API; the SPL imports as tag CSV. Quality codes shown are OPC (GOOD 192 / BAD 24).</p>
+      <p style="margin-top:10px"><b style="color:var(--txt)">References:</b> Vertiv XDU1350B install/O&M guides (SL-71308/71309/70619), ASHRAE 127-2020 CDU rating, ASHRAE Gl 0 / 1.1 commissioning, OCP L2L CDU test methodology.</p>
+      <p style="margin-top:12px;color:var(--txt3)">Engineered by <b style="color:var(--acc2)">MG</b> · Equinix Commissioning Engineering · demo build</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ REPORT MODAL ============ -->
+<div id="reportModal" class="modal hidden">
+  <div class="mcard">
+    <div class="mhead"><h2>LEVEL 1 <b>CERTIFICATE</b> — FACTORY WITNESS TEST</h2><button class="xbtn" id="btnRepClose">✕</button></div>
+    <div class="mbody" style="padding:14px 18px"><div id="reportScroll"></div></div>
+    <div class="mfoot">
+      <span style="flex:1;color:var(--txt3);font:11px var(--sans);align-self:center" id="repHint">Names on the signature blocks are editable before export.</span>
+      <button class="btn ghost" id="btnDlCsv">⬇ CSV results</button>
+      <button class="btn ghost" id="btnDlJson">⬇ JSON</button>
+      <button class="btn ghost" id="btnDlHtml">⬇ HTML report</button>
+      <button class="btn" id="btnPrint">🖨 Print / Save PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SERVER EXPLORER ============ -->
+<div id="explModal" class="modal hidden">
+  <div class="mcard" style="width:640px">
+    <div class="mhead"><h2>SERVER <b>EXPLORER</b> — <span id="explProd" style="font-weight:600;font-size:12px;color:var(--txt2)">…</span></h2>
+      <button class="xbtn" id="btnExplClose">✕</button></div>
+    <div class="mbody">
+      <div id="explTree" style="min-height:200px;max-height:320px;overflow-y:auto"></div>
+      <div id="explModeBox" style="margin-top:12px;border-top:1px solid var(--line);padding-top:11px">
+        <label style="display:flex;gap:9px;align-items:center;font:600 12px var(--sans);cursor:pointer;margin-bottom:7px">
+          <input type="radio" name="explMode" value="provision" checked>
+          Provision new <span class="mono" style="color:var(--acc2)">CH_FWT01 / CDU_01</span> + SPL 1.0 tags (32 registers)</label>
+        <label style="display:flex;gap:9px;align-items:center;font:600 12px var(--sans);cursor:pointer">
+          <input type="radio" name="explMode" value="existing">
+          Use selected device <span id="explSel" class="mono" style="color:var(--txt3)">— none —</span> · missing SPL tags get added</label>
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="btn ghost" id="btnExplRefresh">⟳ Refresh</button>
+      <button class="btn" id="btnExplOk">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DEVICE LIBRARY / REGISTRY ============ -->
+<div id="libModal" class="modal hidden">
+  <div class="mcard" style="width:700px">
+    <div class="mhead"><h2>DEVICE <b>LIBRARY</b> — template registry</h2><button class="xbtn" id="btnLibClose">✕</button></div>
+    <div class="mbody">
+      <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+        <span class="chip" id="libSrc"><span class="dot"></span>SOURCE · —</span>
+        <span style="font:11px var(--sans);color:var(--txt3)">Field workflow: see a change → <b>Propose commit</b> · all good → <b>Mark verified</b> · central DB → <b>Sync</b></span>
+        <span style="flex:1"></span>
+        <button class="btn ghost small" id="btnLibSync">⇅ Sync central DB</button>
+      </div>
+      <div id="libList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ADD REGISTER (field template update) ============ -->
+<div id="regModal" class="modal hidden">
+  <div class="mcard" style="width:580px">
+    <div class="mhead"><h2>ADD <b>REGISTER</b> — field template update</h2><button class="xbtn" id="btnRegClose">✕</button></div>
+    <div class="mbody">
+      <div class="frow"><div style="flex:2"><label class="f">Point name</label><input type="text" id="rgName" placeholder="e.g. Secondary Supply Temperature T2b" spellcheck="false"></div>
+        <div class="w80"><label class="f">Address</label><input type="text" id="rgAddr" placeholder="30021"></div></div>
+      <div class="frow">
+        <div><label class="f">Register type</label><select id="rgType"><option value="16int">16-bit register (3xxxx/4xxxx)</option><option value="Boolean">Discrete input (1xxxx)</option></select></div>
+        <div><label class="f">Signed</label><select id="rgSigned"><option>Unsigned</option><option>Signed</option></select></div>
+        <div class="w80"><label class="f">Gain</label><input type="text" id="rgGain" value="0.1"></div>
+      </div>
+      <div class="frow">
+        <div class="w80"><label class="f">Units</label><input type="text" id="rgUnits" placeholder="oC"></div>
+        <div class="w80"><label class="f">Min</label><input type="text" id="rgMin" placeholder="-5"></div>
+        <div class="w80"><label class="f">Max</label><input type="text" id="rgMax" placeholder="70"></div>
+        <div><label class="f">Access</label><select id="rgRW"><option>R</option><option>RW</option></select></div>
+      </div>
+      <div style="font:11px/1.7 var(--sans);color:var(--txt3)">New datasheet or firmware exposes a register the SPL template doesn't have? Add it here: it appears in the live points table immediately, the updated template is saved on this laptop, and the commit is queued — it pushes to the central registry DB automatically once the API connection is online.</div>
+    </div>
+    <div class="mfoot"><button class="btn ghost" id="btnRegCancel">Cancel</button><button class="btn" id="btnRegAdd">＋ Add &amp; queue commit</button></div>
+  </div>
+</div>
+
+<!-- ============ CONNECTION DOCTOR ============ -->
+<div id="doctorModal" class="modal hidden">
+  <div class="mcard" style="width:620px">
+    <div class="mhead"><h2>CONNECTION <b>DOCTOR</b></h2><button class="xbtn" id="btnDocClose">✕</button></div>
+    <div class="mbody">
+      <div id="docErr" class="mono" style="font-size:11.5px;line-height:1.6;color:var(--crit);background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);border-radius:9px;padding:10px 12px;margin-bottom:12px"></div>
+      <div id="docHint" style="font:12.5px/1.75 var(--sans);color:var(--txt)"></div>
+      <div style="margin-top:13px;font:11px/1.8 var(--sans);color:var(--txt3);border-top:1px solid var(--line);padding-top:10px">
+        On the TOP Server machine: ① Administration tray icon → Settings → <b>Configuration API</b> → Enable = Yes &nbsp;② note the port (HTTPS example 57418; HTTP optional) &nbsp;③ <b>CORS Allowed Origins = *</b> &nbsp;④ HTTPS: open the API URL in a browser tab once and trust the self-signed certificate &nbsp;⑤ restart the runtime after changes. Can't change the server? Run the CORS bridge on this laptop and point the API URL at it.
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="btn ghost" id="btnBridgeDl">⬇ CORS bridge (.py)</button>
+      <button class="btn ghost" id="btnDocSim">Continue in SIMULATION</button>
+      <button class="btn" id="btnDocRetry">↻ Retry</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ HELP DRAWER ============ -->
+<div id="helpModal" class="modal hidden">
+  <div class="mcard" id="helpCard">
+    <div class="mhead"><h2>WITNESS<b>ONE</b> — how this works</h2>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn ghost small" id="btnHelpFlow">🗺 Architecture flowchart</button>
+        <button class="xbtn" id="btnHelpClose">✕</button></div></div>
+    <div id="helpTabs"></div>
+    <div class="mbody" id="helpBody"></div>
+  </div>
+</div>
+
+<!-- ============ ARCHITECTURE FLOWCHART ============ -->
+<div id="flowModal" class="modal hidden">
+  <div class="mcard" id="flowCard">
+    <div class="mhead"><h2>WITNESS<b>ONE</b> — architecture flowchart</h2>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn ghost small" id="btnFlowDl">⬇ Save as HTML</button>
+        <button class="xbtn" id="btnFlowClose">✕</button></div></div>
+    <div class="mbody" id="flowHost" style="background:#0b0e14"></div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<div id="printHost"></div>
