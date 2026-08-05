@@ -90,6 +90,7 @@
     <div id="hsTitle"><span>WITNESSONE LINK SEQUENCER</span><span id="hsStatus">INITIALIZING</span></div>
     <div id="hsLines"></div>
     <div id="hsBarWrap"><div id="hsBar"></div></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn ghost small" id="btnHsCancel">✕ Cancel — back to connect</button></div>
   </div>
 </div>
 
@@ -172,34 +173,39 @@
       <span><span class="chip" id="simChipIn"><span class="dot warn"></span>SIMULATED TELEMETRY</span></span></div>
     <div id="evlog"></div>
   </div>
-</div>
 
-<!-- ============ TEST BENCH DRAWER ============ -->
-<div id="bench">
-  <h3>Test Bench — Scenario Injection</h3>
-  <div class="row"><div class="rlab"><span>IT Heat Load</span><b class="num" id="loadVal">620 kW</b></div>
-    <input type="range" id="loadSlider" min="0" max="1350" value="620"></div>
-  <div class="row"><div class="rlab"><span>Secondary Setpoint (40001 · RW)</span><b class="num" id="spVal">32.0 °C</b></div>
-    <div id="spRow"><input type="range" id="spSlider" min="10" max="55" step="0.5" value="32">
-      <button class="btn small" id="spApply">WRITE</button></div></div>
-  <div class="row"><div class="rlab"><span>Fault injection <span style="color:var(--txt3);font-weight:500">— SIMULATION ONLY</span></span><span style="color:var(--txt3);font-size:10px">feedback toy · no effect on a real device</span></div>
-    <div id="faultBtns">
-      <button class="fbtn" data-f="leak">💧 Leak detect</button>
-      <button class="fbtn" data-f="p1">P1 inverter fault</button>
-      <button class="fbtn" data-f="p2">P2 inverter fault</button>
-      <button class="fbtn" data-f="p3">P3 inverter fault</button>
-      <button class="fbtn" data-f="fmSec">Sec flowmeter</button>
-      <button class="fbtn" data-f="fmPri">Pri flowmeter</button>
-      <button class="fbtn" data-f="lowflow">Low-flow strainer</button>
-      <button class="fbtn" data-f="comms">📡 Comms loss</button>
-    </div></div>
-  <div class="row"><div class="rlab"><span>Write protection (real device)</span></div>
-    <button class="fbtn" id="btnArmWrites" style="width:100%;text-align:center">🔒 SAFE — writes disabled (click to ARM)</button></div>
-  <div class="row"><div class="rlab"><span>Unit</span></div>
-    <div style="display:flex;gap:8px">
-      <button class="btn ghost small" id="btnUnitOff">⏻ Stop unit</button>
-      <button class="btn ghost small" id="btnClearF">Clear all faults</button>
-    </div></div>
+  <!-- ============ TEST BENCH DRAWER ============ -->
+  <!-- Reparented inside #app (QA-2): #bench must live in #app's stacking context so
+       #menuPanel's z-index:60 (which is also inside #app) wins over #bench's z-index:14.
+       When #bench was a sibling of #app, #app's own position:fixed;z-index:10 clamped
+       #menuPanel to 10 relative to the root, so #bench (z-index:14, a root-level sibling)
+       painted over the whole menu while the drawer was open. -->
+  <div id="bench">
+    <h3>Test Bench — Scenario Injection</h3>
+    <div class="row"><div class="rlab"><span>IT Heat Load</span><b class="num" id="loadVal">620 kW</b></div>
+      <input type="range" id="loadSlider" min="0" max="1350" value="620"></div>
+    <div class="row"><div class="rlab"><span>Secondary Setpoint (40001 · RW)</span><b class="num" id="spVal">32.0 °C</b></div>
+      <div id="spRow"><input type="range" id="spSlider" min="10" max="55" step="0.5" value="32">
+        <button class="btn small" id="spApply">WRITE</button></div></div>
+    <div class="row"><div class="rlab"><span>Fault injection <span style="color:var(--txt3);font-weight:500">— SIMULATION ONLY</span></span><span style="color:var(--txt3);font-size:10px">feedback toy · no effect on a real device</span></div>
+      <div id="faultBtns">
+        <button class="fbtn" data-f="leak">💧 Leak detect</button>
+        <button class="fbtn" data-f="p1">P1 inverter fault</button>
+        <button class="fbtn" data-f="p2">P2 inverter fault</button>
+        <button class="fbtn" data-f="p3">P3 inverter fault</button>
+        <button class="fbtn" data-f="fmSec">Sec flowmeter</button>
+        <button class="fbtn" data-f="fmPri">Pri flowmeter</button>
+        <button class="fbtn" data-f="lowflow">Low-flow strainer</button>
+        <button class="fbtn" data-f="comms">📡 Comms loss</button>
+      </div></div>
+    <div class="row"><div class="rlab"><span>Write protection (real device)</span></div>
+      <button class="fbtn" id="btnArmWrites" style="width:100%;text-align:center">🔒 SAFE — writes disabled (click to ARM)</button></div>
+    <div class="row"><div class="rlab"><span>Unit</span></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn ghost small" id="btnUnitOff">⏻ Stop unit</button>
+        <button class="btn ghost small" id="btnClearF">Clear all faults</button>
+      </div></div>
+  </div>
 </div>
 
 <!-- ============ TEST DECK ============ -->

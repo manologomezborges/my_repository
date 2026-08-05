@@ -3,6 +3,11 @@
 (function(){
 const UI = window.UI = {};
 const $=id=>document.getElementById(id);
+/* SEC-2: HTML-escape registry/pointslist-derived strings before they reach innerHTML */
+const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+/* UX-3: make a mouse-only element keyboard-operable (focusable + Enter/Space) */
+function a11yClick(el,fn){el.tabIndex=0;el.setAttribute('role','button');
+  el.onclick=fn;el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fn();}};}
 const DB=window.SPL_DB; const PTS=DB.points; const byId={}; PTS.forEach(p=>byId[p.id]=p);
 const C={teal:'#2ec9de',tealD:'#0894a8',orange:'#e8620c',orangeH:'#ff9a4d',indigo:'#7e7bf2',
   txt:'#e8eaf0',txt2:'#9aa3b2',txt3:'#5b6472',good:'#34d399',warn:'#fbbf24',crit:'#f87171'};
@@ -77,18 +82,18 @@ function buildGenericTiles(){
   pick.forEach((p,i)=>{const col=genColorFor(i);
     GEN_TILES.push({id:p.id,col,unit:p.units||''});genHist[p.id]=[];
     const d=document.createElement('div');d.className='tile';d.id='tile_'+p.id;
-    d.innerHTML=`<div class="tl"><span class="name">${p.name}</span></div>
-      <div class="val num"><span id="tv_${p.id}">—</span><small>${p.units||''}</small></div>
+    d.innerHTML=`<div class="tl"><span class="name">${esc(p.name)}</span></div>
+      <div class="val num"><span id="tv_${p.id}">—</span><small>${esc(p.units||'')}</small></div>
       <div class="sub"><span id="tsub_${p.id}"></span></div>
       <canvas id="tsp_${p.id}" width="76" height="30" style="width:76px;height:30px"></canvas>`;
-    d.onclick=()=>UI.selectPoint(p.id);host.appendChild(d);});
+    a11yClick(d,()=>UI.selectPoint(p.id));host.appendChild(d);});
   if(digital.length){grp(`Status & alarms — ${digital.length} points`,C.orange);
     digital.slice(0,6).forEach(p=>{GEN_TILES.push({id:p.id,col:C.orange,unit:'',digital:true});
       const d=document.createElement('div');d.className='tile';d.id='tile_'+p.id;
-      d.innerHTML=`<div class="tl"><span class="name">${p.name}</span></div>
+      d.innerHTML=`<div class="tl"><span class="name">${esc(p.name)}</span></div>
         <div class="val num" style="font-size:14px"><span id="tv_${p.id}">—</span></div>
-        <div class="sub"><span id="tsub_${p.id}">${p.addrRaw||''}</span></div>`;
-      d.onclick=()=>UI.selectPoint(p.id);host.appendChild(d);});}
+        <div class="sub"><span id="tsub_${p.id}">${esc(p.addrRaw||'')}</span></div>`;
+      a11yClick(d,()=>UI.selectPoint(p.id));host.appendChild(d);});}
 }
 function updGenericTiles(){
   GEN_TILES.forEach(t=>{const r=SIM.read(t.id);const el=$('tile_'+t.id);
@@ -108,7 +113,7 @@ function buildTiles(){
       <div class="val num"><span id="tv_${t.id}">—</span><small>${t.unit}</small></div>
       <div class="sub"><span id="tsub_${t.id}"></span></div>
       ${t.hk?`<canvas id="tsp_${t.id}" width="76" height="30" style="width:76px;height:30px"></canvas>`:''}`;
-    d.onclick=()=>UI.selectPoint(t.pt);
+    a11yClick(d,()=>UI.selectPoint(t.pt));
     host.appendChild(d);});
 }
 function updTiles(s){
@@ -183,10 +188,10 @@ function buildTable(){
     const tr=document.createElement('tr');tr.className='prow';tr.id='pr_'+p.id;
     const dev=p.compliance==='Deviation';
     const na=!p.addrs.length&&p.id!=='P01'&&p.id!=='P26';
-    tr.innerHTML=`<td class="nm" title="${(p.vendorName||'').replace(/"/g,'')}"><span class="q" id="q_${p.id}" style="margin-right:7px"></span>${p.name}${p.rw==='RW'?'<span class="badge rw">RW</span>':''}${dev?'<span class="badge dev">DEV</span>':''}${p.custom?'<span class="badge dev">NEW</span>':''}${na?'<span class="badge na">N/A</span>':''}</td>
-      <td class="addr">${fmtAddr(p)}</td>
-      <td class="v num"><span id="pv_${p.id}">—</span>${p.units?`<small>${p.units}</small>`:''}</td>`;
-    tr.onclick=()=>UI.selectPoint(p.id);
+    tr.innerHTML=`<td class="nm" title="${esc(p.vendorName||'')}"><span class="q" id="q_${p.id}" style="margin-right:7px"></span>${esc(p.name)}${p.rw==='RW'?'<span class="badge rw">RW</span>':''}${dev?'<span class="badge dev">DEV</span>':''}${p.custom?'<span class="badge dev">NEW</span>':''}${na?'<span class="badge na">N/A</span>':''}</td>
+      <td class="addr">${esc(fmtAddr(p))}</td>
+      <td class="v num"><span id="pv_${p.id}">—</span>${p.units?`<small>${esc(p.units)}</small>`:''}</td>`;
+    a11yClick(tr,()=>UI.selectPoint(p.id));
     tb.appendChild(tr);});
   $('ptCount').textContent=PTS.length;
   $('ptSearch').oninput=e=>{const q=e.target.value.toLowerCase();
@@ -221,23 +226,23 @@ function fillDetail(id){
   let rawLine='';
   if(r&&r.raws&&r.vals){rawLine=p.addrs.map((a,i)=>{
     if(r.vals[i]==null)return '';
-    return `<div><span class="k">reg ${a}</span> raw <span class="hl">${r.raws[i]}</span>${g?` × ${g} → `:' → '}<span class="hl">${(+r.vals[i]).toFixed(r.dec??1)}</span> ${p.units||''} <span class="k">${p.vendorNames[i]||''}</span></div>`;}).join('');}
+    return `<div><span class="k">reg ${esc(a)}</span> raw <span class="hl">${r.raws[i]}</span>${g?` × ${g} → `:' → '}<span class="hl">${(+r.vals[i]).toFixed(r.dec??1)}</span> ${esc(p.units||'')} <span class="k">${esc(p.vendorNames[i]||'')}</span></div>`;}).join('');}
   const dev=p.compliance==='Deviation';
   $('ptDetail').innerHTML=`
-    <h4>${p.name} <span style="color:var(--txt3);font-weight:500">· ${p.id} · class ${p.cls}${p.clsFlag&&p.clsFlag!=='A'?' ('+p.clsFlag+')':''}</span></h4>
-    <div><span class="k">Vendor:</span> ${(p.vendorName||'—').replace(/\n/g,' · ')}</div>
-    <div><span class="k">Modbus:</span> ${p.addrRaw?p.addrRaw.replace(/\n/g,', '):'—'} · <span class="k">type</span> ${p.regType||'—'} ${p.signed&&p.signed!=='N/A'?p.signed:''} · <span class="k">read FC</span> ${p.readFC||'—'}${p.writeFC&&p.writeFC!=='N/A'?' · <span class="k">write FC</span> '+p.writeFC:''}</div>
-    ${p.min!=null?`<div><span class="k">Range:</span> ${p.min} … ${p.max} ${p.units||''} · <span class="k">gain</span> ${p.gain}</div>`:''}
-    ${p.alarmDev&&(p.alarmDev.L||p.alarmDev.H)?`<div><span class="k">Alarm dev:</span> ${p.alarmDev.LL?'LL '+p.alarmDev.LL+'% ':''}${p.alarmDev.L?'L '+p.alarmDev.L+'% ':''}${p.alarmDev.H?'H '+p.alarmDev.H+'% ':''}${p.alarmDev.HH?'HH '+p.alarmDev.HH+'%':''} <span class="k">(% of range)</span></div>`:''}
-    ${p.severity?`<div><span class="k">Severity:</span> ${p.severity}${p.notifyEng?' · notify engineers':''}</div>`:''}
-    ${p.stateTable?`<div><span class="k">States:</span> ${(DB.stateTables[p.stateTable]||[]).map(([i,t])=>i+'='+t).join(' · ')}</div>`:''}
-    ${p.floatStatus?`<div><span class="k">Value map:</span> ${p.floatStatus.replace(/\n/g,' · ')}</div>`:''}
-    ${r&&r.calc?`<div><span class="k">Calc:</span> ${r.calc}</div>`:''}
+    <h4>${esc(p.name)} <span style="color:var(--txt3);font-weight:500">· ${esc(p.id)} · class ${esc(p.cls)}${p.clsFlag&&p.clsFlag!=='A'?' ('+esc(p.clsFlag)+')':''}</span></h4>
+    <div><span class="k">Vendor:</span> ${esc(p.vendorName||'—').replace(/\n/g,' · ')}</div>
+    <div><span class="k">Modbus:</span> ${p.addrRaw?esc(p.addrRaw).replace(/\n/g,', '):'—'} · <span class="k">type</span> ${esc(p.regType||'—')} ${p.signed&&p.signed!=='N/A'?esc(p.signed):''} · <span class="k">read FC</span> ${esc(p.readFC||'—')}${p.writeFC&&p.writeFC!=='N/A'?' · <span class="k">write FC</span> '+esc(p.writeFC):''}</div>
+    ${p.min!=null?`<div><span class="k">Range:</span> ${p.min} … ${p.max} ${esc(p.units||'')} · <span class="k">gain</span> ${p.gain}</div>`:''}
+    ${p.alarmDev&&(p.alarmDev.L||p.alarmDev.H)?`<div><span class="k">Alarm dev:</span> ${p.alarmDev.LL?'LL '+esc(p.alarmDev.LL)+'% ':''}${p.alarmDev.L?'L '+esc(p.alarmDev.L)+'% ':''}${p.alarmDev.H?'H '+esc(p.alarmDev.H)+'% ':''}${p.alarmDev.HH?'HH '+esc(p.alarmDev.HH)+'%':''} <span class="k">(% of range)</span></div>`:''}
+    ${p.severity?`<div><span class="k">Severity:</span> ${esc(p.severity)}${p.notifyEng?' · notify engineers':''}</div>`:''}
+    ${p.stateTable?`<div><span class="k">States:</span> ${(DB.stateTables[p.stateTable]||[]).map(([i,t])=>esc(i)+'='+esc(t)).join(' · ')}</div>`:''}
+    ${p.floatStatus?`<div><span class="k">Value map:</span> ${esc(p.floatStatus).replace(/\n/g,' · ')}</div>`:''}
+    ${r&&r.calc?`<div><span class="k">Calc:</span> ${esc(r.calc)}</div>`:''}
     ${rawLine}
-    ${r?`<div><span class="k">Quality:</span> <span class="${r.q.code===24?'':''}" style="color:${r.q.code===24?'var(--crit)':r.q.code===null?'var(--txt3)':'var(--good)'}">${r.q.txt}</span></div>`:''}
-    ${dev?`<div style="color:var(--warn)">▲ SPL DEVIATION — ${(p.vendorComment||'').replace(/\n/g,' ')}</div>`:''}
-    ${!dev&&p.vendorComment?`<div><span class="k">Note:</span> ${p.vendorComment.replace(/\n/g,' ')}</div>`:''}
-    ${p.equinixComment?`<div><span class="k">Equinix:</span> ${p.equinixComment.replace(/\n/g,' ')}</div>`:''}`;
+    ${r?`<div><span class="k">Quality:</span> <span class="${r.q.code===24?'':''}" style="color:${r.q.code===24?'var(--crit)':r.q.code===null?'var(--txt3)':'var(--good)'}">${esc(r.q.txt)}</span></div>`:''}
+    ${dev?`<div style="color:var(--warn)">▲ SPL DEVIATION — ${esc(p.vendorComment||'').replace(/\n/g,' ')}</div>`:''}
+    ${!dev&&p.vendorComment?`<div><span class="k">Note:</span> ${esc(p.vendorComment).replace(/\n/g,' ')}</div>`:''}
+    ${p.equinixComment?`<div><span class="k">Equinix:</span> ${esc(p.equinixComment).replace(/\n/g,' ')}</div>`:''}`;
 }
 
 /* ---------- bench ---------- */

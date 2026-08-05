@@ -170,9 +170,26 @@ function wireAddReg(){
   $('btnRegAdd').onclick=async()=>{
     const name=$('rgName').value.trim(),addr=parseInt($('rgAddr').value.trim(),10);
     if(!name||!addr||addr<10001||addr>49999){toast('Enter a point name and a 5-digit address (1xxxx / 3xxxx / 4xxxx)','warn');return;}
+    // NEVER touch the approved list: field changes fork a FIELD DRAFT revision.
+    // Fork FIRST (QA-3 fix): a same-day repeat add must land on the revision that
+    // already carries today's earlier field points (forkDraft finds that existing
+    // draft and switches window.SPL_DB onto it), so the duplicate-address check
+    // and id generator below run against the true current point set instead of
+    // the untouched approved list — otherwise both checks pass wrongly and the
+    // push after fork silently duplicates the id and address.
+    const devId=window.W1_ACTIVE_TEMPLATE.id;
+    const wasApproved=(window.W1_ACTIVE_TEMPLATE.registry.revStatus||'approved')==='approved';
+    if(wasApproved){
+      const nr=REGISTRY.forkDraft(devId);
+      toast(`✎ Approved list untouched — changes go to a new revision: ${nr.splVersion}`,'',4600);
+      window.W1_FILLSPL&&W1_FILLSPL();
+    }
     if(window.SPL_DB.points.some(p=>(p.addrs||[]).includes(addr))){toast(`Address ${addr} is already mapped in the template`,'warn');return;}
     const isB=$('rgType').value==='Boolean'||String(addr)[0]==='1';
-    const p={id:'C'+String(window.SPL_DB.points.filter(x=>x.custom).length+1).padStart(2,'0'),custom:true,
+    const usedIds=new Set(window.SPL_DB.points.map(p=>p.id));
+    let n=window.SPL_DB.points.filter(x=>x.custom).length+1,newId;
+    do{newId='C'+String(n++).padStart(2,'0');}while(usedIds.has(newId));
+    const p={id:newId,custom:true,
       name,vendorName:name,vendorNames:[name],cls:isB?'BI':'AI',clsFlag:'A',
       addrs:[addr],addrRaw:String(addr),count:'1',bitmask:'N/A',
       regType:isB?'Boolean':'16int',signed:isB?'Discrete Input':$('rgSigned').value,
@@ -186,14 +203,6 @@ function wireAddReg(){
       trendCOV:null,custVisible:null,
       equinixComment:'FIELD-ADDED register — pending central registry approval',
       vendorComment:'Added in the field via WitnessONE ('+new Date().toISOString().slice(0,10)+')'};
-    // NEVER touch the approved list: field changes fork a FIELD DRAFT revision
-    const devId=window.W1_ACTIVE_TEMPLATE.id;
-    const wasApproved=(window.W1_ACTIVE_TEMPLATE.registry.revStatus||'approved')==='approved';
-    if(wasApproved){
-      const nr=REGISTRY.forkDraft(devId);
-      toast(`✎ Approved list untouched — changes go to a new revision: ${nr.splVersion}`,'',4600);
-      window.W1_FILLSPL&&W1_FILLSPL();
-    }
     window.SPL_DB.points.push(p);
     REGISTRY.snapshotDraft(devId);
     window.UI&&UI.rebuildPoints&&UI.rebuildPoints();
@@ -228,6 +237,13 @@ function runDiscovery(){
 
 /* ---------- SIM/LIVE mode ---------- */
 let mode='sim';
+/* ---------- handshake cancel (UX-2) ----------
+   hsGen is bumped on every connect attempt and on cancel; simConnect/liveConnect
+   capture their own generation and stop touching the UI (or calling startApp) the
+   moment it no longer matches, so a stalled ping/probe/API call left running in
+   the background after Cancel can never resurface and clobber a later attempt. */
+let hsGen=0;
+function hsCancel(){hsGen++;window.W1_HS_ABORT=true;$('handshake').classList.add('hidden');$('boot').classList.remove('hidden');}
 function setMode(m){mode=m;LIVE.enabled=(m==='live');
   $('segSim').classList.toggle('on',m==='sim');
   $('segLive').classList.toggle('on',m==='live');
@@ -333,6 +349,7 @@ function startApp(){
 
 /* ---------- SIM connect (typed sequence) ---------- */
 function simConnect(){
+  const myGen=++hsGen;window.W1_HS_ABORT=false;
   const ip=$('ip').value.trim(),port=$('port').value.trim(),unit=$('unitId').value.trim(),fwv=$('fw').value;
   SIM.cfg.ip=ip;SIM.cfg.port=+port||502;SIM.cfg.unit=+unit||1;SIM.cfg.fw=fwv;
   $('devIP').textContent=`${ip}:${port}`;$('devFW').textContent='FW '+fwv;
@@ -355,7 +372,8 @@ function simConnect(){
   const cur=document.createElement('span');cur.className='cursor';
   let i=0;
   const next=()=>{
-    if(i>=L.length){cur.remove();setTimeout(startApp,700);return;}
+    if(myGen!==hsGen){cur.remove();return;} // cancelled — don't keep animating a hidden screen
+    if(i>=L.length){cur.remove();setTimeout(()=>{if(myGen===hsGen)startApp();},700);return;}
     const [txt,cls,delay]=L[i];i++;
     const d=document.createElement('div');if(cls)d.className=cls;d.innerHTML=txt;
     el.appendChild(d);el.appendChild(cur);el.scrollTop=1e6;
@@ -373,6 +391,7 @@ function liveFail(r,what){$('hsStatus').textContent='FAILED';
   hsLine(`<span class="err">✕ ${what} failed — ${r.status?'HTTP '+r.status:r.err}</span>`);showDoctor(r,what);}
 
 async function liveConnect(){
+  const myGen=++hsGen;window.W1_HS_ABORT=false;
   readLiveCfg();
   const via=LIVE.linkVia||'modbus';
   const ip=$('ip').value.trim(),port=$('port').value.trim(),unit=$('unitId').value.trim()||'1',fwv=$('fw').value;
@@ -388,6 +407,7 @@ async function liveConnect(){
     hsLine(`<span class="dim">witnessone</span> link --live --direct-modbus ${ip}:${port} --unit ${unit} --template ${W1_ACTIVE_TEMPLATE.id}`);
     bar(8);
     if(!W1AGENT.present)await REGISTRY.detectAgent().catch(()=>{});
+    if(myGen!==hsGen)return; // cancelled while waiting on agent detection
     if(!W1AGENT.present){
       hsLine(`<span class="err">WitnessONE Agent not running on this laptop — direct Modbus unavailable; continuing in SIMULATION</span>`);
       hsLine(`<span class="dim">  fix → double-click WitnessONE.exe (or run_agent.bat) and reconnect</span>`);
@@ -396,6 +416,7 @@ async function liveConnect(){
       /* ① reachability — a real system ping + TCP :port check */
       hsLine(`Pre-flight ① · reachability — ping ${ip} …`);
       const pg=await W1AGENT.ping({host:ip,port:+port||502});bar(24);
+      if(myGen!==hsGen)return; // cancelled — e.g. the ping stalled on an unreachable subnet
       if(pg.ok)hsLine(`  <span class="ok">✔ host answers</span> — ${pg.icmp?'ICMP ping OK':'ICMP blocked'}${pg.tcp?` · TCP :${port} open`:''} (${pg.ms??'—'} ms)`);
       else hsLine(`  <span class="err">✕ no answer — ping failed and TCP :${port} refused</span> <span class="dim">(power? cable? IP? VM network bridged?)</span>`);
       /* ② first register of the SELECTED SPL revision */
@@ -405,6 +426,7 @@ async function liveConnect(){
       if(pg.ok){
         hsLine(`Pre-flight ② · first SPL point — ${fp?fp.id+' '+fp.name.slice(0,26):''} @ <span class="acc">${fAddr}</span> …`);
         const pb=await W1AGENT.probe({ip,port:+port||502,unit:+unit||1,addr:fAddr});bar(40);
+        if(myGen!==hsGen)return; // cancelled while the register probe was in flight
         if(pb.ok){mOK=true;
           hsLine(`  <span class="ok">✔ ${fAddr} = ${pb.value}</span> (${pb.ms} ms) — REAL MODBUS CONFIRMED`);}
         else hsLine(`  <span class="err">✕ register read failed — ${String(pb.error||'no response').slice(0,60)}</span> <span class="dim">(unit ID right? Modbus enabled on the unit?)</span>`);
@@ -412,6 +434,7 @@ async function liveConnect(){
       /* gate: both green → full live link; otherwise run SIMULATED so the visit isn't wasted */
       if(mOK){
         const pr=await LIVE.agentProbe();bar(80);
+        if(myGen!==hsGen)return; // cancelled while the block-read confirmation was in flight
         if(pr.ok){LIVE.valuesLive=true;LIVE.source='agent';
           const n=Object.keys((pr.raw.data||{}).values||{}).length;
           hsLine(`Direct Modbus → <span class="ok">${n} registers per block-read cycle (FC04 · FC03 · FC02)</span> — FULL LIVE telemetry`);
@@ -426,31 +449,37 @@ async function liveConnect(){
     /* ---- TOP SERVER: Config API provisioning + optional IoT Gateway values ---- */
     hsLine(`<span class="dim">witnessone</span> link --live --topserver ${LIVE.cfg.base} --device ${ip}.${unit} --template ${W1_ACTIVE_TEMPLATE.id}`);
     const ab=await LIVE.about();bar(12);
+    if(myGen!==hsGen)return; // cancelled while waiting on Configuration API
     if(!ab.ok)return liveFail(ab,'GET /config/v1/about');
     LIVE.configOk=true;
     hsLine(`Configuration API OK — <span class="acc">${(ab.data||{}).product_name||'TOP Server'} ${(ab.data||{}).product_version||''}</span>  (${ab.ms} ms · Basic auth)`);
     const chs=await LIVE.channels();bar(24);
+    if(myGen!==hsGen)return; // cancelled while browsing channels
     if(!chs.ok)return liveFail(chs,'GET /config/v1/project/channels');
     hsLine(`Project browse → <span class="ok">${(chs.data||[]).length} channel(s)</span> ${(chs.data||[]).slice(0,4).map(c=>c['common.ALLTYPES_NAME']).join(' · ')||''}`);
     hsLine(`Target ${LIVE.target.mode==='provision'?'(provision)':'(existing)'} → <span class="acc">${LIVE.target.ch}.${LIVE.target.dev}</span>`);
     try{await LIVE.provision(ip,unit,m=>hsLine('  '+m,'dim'));}
-    catch(r){return liveFail(r,'Provisioning (POST channels/devices/tags)');}
+    catch(r){if(myGen!==hsGen)return;return liveFail(r,'Provisioning (POST channels/devices/tags)');}
+    if(myGen!==hsGen)return; // cancelled during provisioning
     bar(56);
     const tg=await LIVE.tags(LIVE.target.ch,LIVE.target.dev);bar(66);
+    if(myGen!==hsGen)return; // cancelled while verifying tags
     if(tg.ok)hsLine(`Verify → GET …/${LIVE.target.dev}/tags: <span class="ok">${(tg.data||[]).length} tags on device</span>`);
     LIVE.buildTagMap();
     if(LIVE.cfg.iot){
       const pr=await LIVE.iotProbe();bar(88);
+      if(myGen!==hsGen)return; // cancelled while probing the IoT Gateway
       if(pr.ok){LIVE.valuesLive=true;LIVE.source='iot';
         hsLine(`Live values → <span class="ok">/iotgateway/read OK</span> — FULL LIVE telemetry (${LIVE.st.tagTotal} registers)`);}
       else hsLine(`IoT Gateway not responding (${pr.raw&&(pr.raw.status||pr.raw.err)}) — <span style="color:var(--warn)">values stay SIMULATED</span>`);
     }else{bar(88);
       hsLine(`No IoT Gateway URL — config is LIVE, values SIMULATED (add the gateway URL for live values)`,'dim');}
   }
+  if(myGen!==hsGen)return; // cancelled just before hand-off
   bar(100);
   hsLine(`<span class="ok">■ LIVE LINK ESTABLISHED — ${[LIVE.configOk?'TOP Server config':null,LIVE.valuesLive?(LIVE.source==='agent'?'direct Modbus values':'gateway values'):null].filter(Boolean).join(' + ')||'session open'}</span>`);
   $('hsStatus').textContent='LINKED · LIVE';
-  setTimeout(startApp,900);
+  setTimeout(()=>{if(myGen===hsGen)startApp();},900);
 }
 
 /* ---------- wire up ---------- */
@@ -459,6 +488,7 @@ addEventListener('DOMContentLoaded',async()=>{
     ip:$('ip').value,port:$('port').value,unit:$('unitId').value,
     make:$('make').value,model:$('model').value,fw:$('fw').value,mode}));}catch(e){}};
   $('btnConnect').onclick=()=>{saveSel();mode==='live'?liveConnect():simConnect();};
+  $('btnHsCancel').onclick=hsCancel;
   $('btnBack').onclick=()=>{
     if(window.FWT&&FWT.running&&!confirm('A test sequence is running — abort it and return to the connect screen?'))return;
     try{sessionStorage.setItem('w1back','1');}catch(e){}
@@ -481,6 +511,8 @@ addEventListener('DOMContentLoaded',async()=>{
       if(bench&&bench.classList.contains('open')){bench.classList.remove('open');e.preventDefault();return;}
       for(const id of MODALS){const m=$(id);
         if(m&&!m.classList.contains('hidden')){m.classList.add('hidden');e.preventDefault();return;}}
+      const hs=$('handshake');
+      if(hs&&!hs.classList.contains('hidden')){hsCancel();e.preventDefault();return;}
     }
     if(e.key==='Enter'&&!$('boot').classList.contains('hidden')){
       const t=e.target;

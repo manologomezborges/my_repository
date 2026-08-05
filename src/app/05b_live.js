@@ -52,7 +52,10 @@ LIVE.tagName=function(p,i){
   const lab=sanitize(vn||((p.addrs.length>1?p.name+'_'+(i+1):p.name)));
   return `${p.id}_${lab}`;
 };
-function dtypeOf(p){ if((p.regType||'').toLowerCase().includes('bool'))return 1;      // Boolean
+function dtypeOf(p){ const rt=(p.regType||'').toLowerCase();
+  if(rt.includes('bool'))return 1;                                                    // Boolean
+  if(p.span32){ if(rt==='float32')return 8;                                           // Float (2 registers)
+    return (p.signed==='Signed')?6:7; }                                              // Long / DWord (2 registers)
   return (p.signed==='Signed')?4:5; }                                                // Short / Word
 LIVE.buildTagMap=function(){
   const map={};let total=0;
@@ -140,10 +143,7 @@ LIVE.pollOnce=async function(){
       if(!(r.ok&&r.data&&r.data.ok))throw r;
       const vals={};
       DB.points.forEach(p=>{ if(!p.addrs||!p.addrs.length)return;
-        const o={raws:[],ok:[],reasons:[],ts:r.data.t};
-        p.addrs.forEach((a,i)=>{let v=r.data.values[String(a)];const okv=v!=null;
-          if(okv&&p.signed==='Signed'&&v>32767)v-=65536;
-          o.raws[i]=okv?v:null;o.ok[i]=okv;o.reasons[i]=okv?'':'no data';});
+        const o=LIVE.composePoint(p,r.data.values);o.ts=r.data.t;
         vals[p.id]=o;});
       LIVE.st.values=vals;
       if(LIVE.st.failCount>0||LIVE._lostToast){const lc=document.getElementById('linkChip'),lt=document.getElementById('linkTxt');
@@ -163,30 +163,76 @@ LIVE.pollOnce=async function(){
     LIVE.st.values=vals;LIVE.st.failCount=0;
   }catch(e){
     LIVE.st.failCount++;if(LIVE.st.failCount>=2){if(!LIVE._skip)LIVE._skip=4;
+      LIVE.st.values={};  // link lost — drop last values so reads go BAD, never served as live GOOD
       const lc=document.getElementById('linkChip'),lt=document.getElementById('linkTxt');
       if(lc){lc.className='chip bad';lt.textContent='LINK · LOST — RETRYING';}
       if(!LIVE._lostToast){LIVE._lostToast=1;try{toast('⚠ Link lost — retrying every ~5 s (device off? cable?)','warn',4200);}catch(e){}}}
     if(LIVE.st.failCount===3)
-      window.UI&&UI.log('⚠ Live reads failing — LINK LOST. Holding last values, retrying every ~5 s (session stays LIVE)','warn');
+      window.UI&&UI.log('⚠ Live reads failing — LINK LOST. Reads now report BAD quality (not simulated), retrying every ~5 s (session stays LIVE)','warn');
   }finally{LIVE.inflight=false;}
 };
 const DECOF=g=>g===0.1?1:(g===0.01?2:0);
+/* Compose a point's engineering-relevant raw value(s) from the agent's
+   {addr: word} payload. The agent returns individual 16-bit words / bits (see
+   read_template_block) and the UI is responsible for combining 32-bit spans,
+   extracting bit-mapped points and applying sign. Emits per-address
+   {raws,ok,reasons} so a span32/bit point collapses to ONE composed value
+   rather than being certified as a bare high word or a shared register.  MG */
+LIVE.composePoint=function(p,values){
+  const o={raws:[],ok:[],reasons:[]};
+  const order=(p.wordOrder||'hilo').toLowerCase();
+  const rt=(p.regType||'').toLowerCase();
+  (p.addrs||[]).forEach((a,i)=>{
+    if(p.span32){
+      const w0=values[String(a)],w1=values[String(a+1)];
+      if(w0==null||w1==null){                          // second word never arrived → not trustworthy
+        o.raws[i]=null;o.ok[i]=false;
+        o.reasons[i]=(w0==null&&w1==null)?'no data':'span word missing';return;}
+      const hi=(order==='lohi'?w1:w0)&0xFFFF, lo=(order==='lohi'?w0:w1)&0xFFFF;
+      const u32=((hi<<16)|lo)>>>0;
+      let v;
+      if(rt==='float32'){const dv=new DataView(new ArrayBuffer(4));
+        dv.setUint32(0,u32,false);v=dv.getFloat32(0,false);}
+      else v=(p.signed==='Signed')?(u32|0):u32;         // 32int (signed via |0)
+      o.raws[i]=v;o.ok[i]=true;o.reasons[i]='';
+    }else if(p.bit!=null){
+      const w=values[String(a)];const okv=w!=null;
+      o.raws[i]=okv?((w>>p.bit)&1):null;o.ok[i]=okv;o.reasons[i]=okv?'':'no data';
+    }else{
+      let v=values[String(a)];const okv=v!=null;
+      if(okv&&p.signed==='Signed'&&v>32767)v-=65536;
+      o.raws[i]=okv?v:null;o.ok[i]=okv;o.reasons[i]=okv?'':'no data';
+    }
+  });
+  return o;
+};
 LIVE.install=function(){
   if(SIM._readSim)return;
   SIM._readSim=SIM.read.bind(SIM);
   SIM.read=function(id){
     const p=DB.points.find(x=>x.id===id);
-    const lv=(LIVE.valuesLive&&!LIVE.pauseTwin)?LIVE.st.values[id]:null;
-    if(!lv||!p||!p.addrs||!p.addrs.length)return SIM._readSim(id);
-    const g=p.gain||1,dec=DECOF(g);
+    const liveSession=LIVE.valuesLive&&!LIVE.pauseTwin;
+    // Not a live session (or twin paused for functional dynamics), or a point
+    // with no Modbus register → use the WitnessONE model.
+    if(!liveSession||!p||!p.addrs||!p.addrs.length)return SIM._readSim(id);
+    const g=p.gain||1,rt=(p.regType||'').toLowerCase();
+    let dec=DECOF(g);if(rt==='float32'&&dec<1)dec=2;
+    const lv=LIVE.st.values[id];
+    const stale=!!(lv&&lv.ts!=null&&(Date.now()-lv.ts)>(LIVE.staleMs||15000));
+    // LIVE session but no FRESH device data: report BAD honestly. Never fall
+    // back to the simulator here — a certificate that declares itself LIVE must
+    // never carry fabricated GOOD values for registers that were never read.
+    if(!lv||stale)return {id,vals:null,raws:null,dec,
+      q:{code:24,txt:'BAD ('+(stale?'stale — no fresh live read':'no live data')+')'},
+      txt:'—',stale:true,degraded:true};
     const allBad=lv.ok.every(o=>!o);
     if(allBad)return {id,vals:null,raws:null,dec,
-      q:{code:24,txt:'BAD ('+(lv.reasons.find(x=>x)||'no data')+')'},txt:'—',stale:true};
+      q:{code:24,txt:'BAD ('+(lv.reasons.find(x=>x)||'no data')+')'},txt:'—',stale:true,degraded:true};
     const vals=lv.raws.map(r2=>(r2==null?0:r2)*g);
-    const isBin=(p.regType||'').toLowerCase().includes('bool');
+    const isBin=rt.includes('bool')||p.bit!=null;
     let txt,alarm=false;
-    if(id==='P02'){txt=`${lv.raws[0]} · ${(SIM.unitStates[lv.raws[0]]||'?').toUpperCase()}`;}
-    else if(id==='P25'){txt=vals.map(v=>v?'FLT':'OK').join('/');alarm=vals.some(v=>v);}
+    if(SIM.isCDU&&id==='P02'){txt=`${lv.raws[0]} · ${(SIM.unitStates[lv.raws[0]]||'?').toUpperCase()}`;}
+    else if(SIM.isCDU&&id==='P25'){txt=vals.map(v=>v?'FLT':'OK').join('/');alarm=vals.some(v=>v);}
     else if(isBin){txt=vals.map(v=>v?'ALARM':'NORM').join(' / ');alarm=vals.some(v=>v);}
     else txt=vals.map(v=>v.toFixed(dec)).join(' / ');
     return {id,vals,raws:lv.raws,dec,q:{code:192,txt:'GOOD (192) · LIVE'},txt,alarm,live:true};

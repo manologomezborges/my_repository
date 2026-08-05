@@ -177,15 +177,28 @@ def save_revision(dev_id, rev):
 def save_template(t):  # legacy path (remote sync still speaks v1): split + store as v2
     dev, rev = _split_v1(t)
     save_device(dev)
-    rd = os.path.join(_base(), "pointslists", dev["id"]); os.makedirs(rd, exist_ok=True)
-    json.dump(rev, open(os.path.join(rd, rev["revId"] + ".json"), "w"), indent=1)
+    # Route through save_revision so the approved-revision immutability guard
+    # applies here too — an existing 'approved' pointslist is never overwritten
+    # (the central DB publishes changes as NEW revisions, not in place).
+    return save_revision(dev["id"], rev)
+
+def _ssl_ctx():
+    """Verifying TLS context (default). Verification is disabled ONLY when the
+    operator explicitly passes --insecure-tls for a known self-signed lab server
+    — never silently, so an on-path attacker can't MITM the forwarded TOP Server
+    credentials or poison synced registry templates."""
+    ctx = ssl.create_default_context()
+    if ARGS is not None and getattr(ARGS, "insecure_tls", False):
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+    return ctx
 
 def remote_call(method, path, body=None):
     if not ARGS.remote: return None
     rq = urllib.request.Request(ARGS.remote.rstrip("/") + path,
         data=json.dumps(body).encode() if body is not None else None, method=method,
         headers={"Content-Type": "application/json"})
-    ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+    ctx = _ssl_ctx()
     try:
         with urllib.request.urlopen(rq, context=ctx, timeout=8) as r:
             return {"ok": True, "status": r.status, "data": json.loads(r.read() or b"null")}
@@ -202,6 +215,12 @@ def db():
     return c
 
 # ---------------- Modbus TCP client (raw sockets) ----------------
+class ModbusException(IOError):
+    """Protocol-level exception response (e.g. illegal data address) from a
+    HEALTHY socket — distinct from a transport/socket failure. Callers must not
+    tear down the session or trip the circuit breaker on this."""
+    pass
+
 class Modbus:
     def __init__(self, ip, port=502, unit=1, timeout=1.2):
         self.ip, self.port, self.unit, self.timeout = ip, int(port), int(unit), timeout
@@ -220,7 +239,7 @@ class Modbus:
         (tid, proto, ln, unit) = struct.unpack(">HHHB", hdr)
         body = self._recvn(ln - 1)
         if body[0] & 0x80:
-            raise IOError(f"Modbus exception fc={fc} code={body[1]}")
+            raise ModbusException(f"Modbus exception fc={fc} code={body[1]}")
         return body
     def _recvn(self, n):
         buf = b""
@@ -271,6 +290,28 @@ def template_offsets(template):
                 out[k].append((off + s, int(a) + s))
     return out
 
+_FC_FOR_KIND = {"input": 4, "hold": 3, "disc": 2, "coil": 1}
+def validate_point_fcs(template):
+    """Flag points whose declared readFC/writeFC disagrees with the Modbus table
+    implied by the address prefix (addr_split). The Agent resolves the table from
+    the ADDRESS, so a mismatch means the SPL's declared FC is silently ignored and
+    a different register is read/written — surface it rather than certify blindly."""
+    warns = []
+    for p in (template.get("spl", {}).get("points") or []):
+        pid = p.get("id") or p.get("name") or "?"
+        for a in (p.get("addrs") or []):
+            kind, _ = addr_split(a)
+            exp = _FC_FOR_KIND.get(kind)
+            rfc = p.get("readFC")
+            if rfc is not None and exp is not None and int(rfc) != exp:
+                warns.append(f"{template.get('id')}/{pid}: addr {a} is {kind} "
+                             f"(FC{exp}) but declares readFC={rfc}")
+            wfc = p.get("writeFC")
+            if wfc is not None and kind in ("input", "disc"):
+                warns.append(f"{template.get('id')}/{pid}: addr {a} is read-only "
+                             f"{kind} but declares writeFC={wfc}")
+    return warns
+
 def cluster(offs, gap=24, maxlen=110):
     """Sorted unique offsets -> [(lo,hi)] blocks, splitting on gaps (sparse maps)."""
     offs = sorted({o for o, _ in offs})
@@ -309,6 +350,12 @@ def with_device(ip, port, unit, fn):
                 r = fn(ent["m"])
                 _DOWN.pop(key, None)
                 return r
+            except ModbusException:
+                # device answered a protocol exception on a healthy socket: it is
+                # reachable. Do NOT close/reconnect or trip the breaker — surface
+                # the exception to the caller (block reads narrow it per-register).
+                _DOWN.pop(key, None)
+                raise
             except IOError as e:
                 try: ent["m"] and ent["m"].close()
                 except Exception: pass
@@ -339,11 +386,24 @@ def read_template_block(ip, port, unit, template):
             omap = {}
             for off, addr in offs: omap.setdefault(off, []).append(addr)
             for lo, hi in cluster(offs):
-                vals = (m.read_words(fc, lo, hi - lo + 1) if rd == "w"
-                        else m.read_bits(fc, lo, hi - lo + 1))
-                for off in range(lo, hi + 1):
-                    for addr in omap.get(off, []):
-                        out[str(addr)] = vals[off - lo]
+                try:
+                    vals = (m.read_words(fc, lo, hi - lo + 1) if rd == "w"
+                            else m.read_bits(fc, lo, hi - lo + 1))
+                    for off in range(lo, hi + 1):
+                        for addr in omap.get(off, []):
+                            out[str(addr)] = vals[off - lo]
+                except ModbusException:
+                    # a cluster spans an unmapped register the device rejects;
+                    # read the template's own mapped offsets one at a time and
+                    # skip only the offending ones (session stays up).
+                    for off in sorted(o for o in omap if lo <= o <= hi):
+                        try:
+                            v = (m.read_words(fc, off, 1)[0] if rd == "w"
+                                 else m.read_bits(fc, off, 1)[0])
+                        except ModbusException:
+                            continue
+                        for addr in omap.get(off, []):
+                            out[str(addr)] = v
         return out
     return with_device(ip, port, unit, go), int(time.time() * 1000)
 
@@ -357,7 +417,10 @@ def scan_registers(ip, port, unit, ranges, chunk=12, delay=0.04):
         nonlocal probed, refused
         for rg in ranges:
             fc, start, cnt = int(rg["fc"]), int(rg["start"]), int(rg["count"])
-            base = 30001 if fc == 4 else (40001 if fc == 3 else 10001)
+            # template-derived ranges carry their own base (6-digit lists too);
+            # ad-hoc ranges default to the 5-digit namespace.
+            base = int(rg["base"]) if rg.get("base") is not None else \
+                   (30001 if fc == 4 else (40001 if fc == 3 else 10001))
             off = start
             while off < start + cnt:
                 n = min(chunk, start + cnt - off)
@@ -382,6 +445,41 @@ def scan_registers(ip, port, unit, ranges, chunk=12, delay=0.04):
     with_device(ip, port, unit, go)
     return {"found": found, "probed": probed, "refusedChunks": refused}
 
+def _template_match(m, template, sample=8):
+    """Score how well a device matches THIS template by reading a sample of the
+    template's own points and checking each responds with an in-range value.
+    Returns (score 0..1, points_tried). A device that rejects the template's
+    address map (illegal address) or answers implausible values scores low, so
+    the wrong template can no longer win by default."""
+    pts = []
+    for p in (template.get("spl", {}).get("points") or []):
+        addrs = p.get("addrs") or []
+        if not addrs: continue
+        pts.append((addrs[0], p.get("gain") or 1, p.get("min"), p.get("max"),
+                    bool(p.get("span32"))))
+        if len(pts) >= sample: break
+    if not pts: return 0.0, 0
+    total = 0.0; tried = 0
+    for addr, gain, lo, hi, span32 in pts:
+        kind, off = addr_split(addr)
+        tried += 1
+        try:
+            if kind in ("input", "hold"):
+                fc = 4 if kind == "input" else 3
+                val = m.read_words(fc, off, 2 if span32 else 1)[0]
+            elif kind == "disc":
+                val = m.read_bits(2, off, 1)[0]
+            else:
+                val = m.read_bits(1, off, 1)[0]
+        except Exception:
+            continue  # address not implemented as this table → 0 for this point
+        if lo is not None and hi is not None and hi > lo:
+            # accept either raw or gain-scaled reading inside the declared range
+            total += 1.0 if (lo <= val <= hi or lo <= val * gain <= hi) else 0.3
+        else:
+            total += 0.6  # responded, but no range to confirm against
+    return (total / tried if tried else 0.0), tried
+
 def fingerprint(ip, port, unit, templates):
     """Open a real Modbus session and pattern-match against the template library."""
     m = Modbus(ip, port, unit, timeout=0.9)
@@ -397,19 +495,18 @@ def fingerprint(ip, port, unit, templates):
         try: alarms = m.read_bits(2, 0, 2)
         except Exception: alarms = None
         fp = {"open": True, "unitStatus": status, "pumps": pumps, "alarms": alarms}
-        best = None
+        best = None  # (score, tried, template)
         for t in templates:
-            score = 0
-            if status is not None and 0 <= status <= 15: score += 50
-            if pumps and all(0 <= v <= 100 for v in pumps): score += 30
-            if alarms is not None: score += 18
-            if best is None or score > best[0]: best = (score, t)
-        if best and best[0] >= 68:
-            t = best[1]
+            score, tried = _template_match(m, t)
+            if best is None or score > best[0]: best = (score, tried, t)
+        # Require a strong, template-specific match against enough of its own
+        # points before claiming an identity — never fabricate confidence.
+        if best and best[1] >= 4 and best[0] >= 0.6:
+            score, tried, t = best
             fp["match"] = {"templateId": t["id"], "make": t["identity"]["make"],
                           "model": t["identity"]["model"],
                           "fw": t["identity"]["firmwares"][0],
-                          "confidence": min(99.0, best[0] + 30.4)}
+                          "confidence": round(min(99.0, 100.0 * score), 1)}
         return fp
     finally:
         m.close()
@@ -418,8 +515,49 @@ def fingerprint(ip, port, unit, templates):
 UI_PATH = None
 class H(BaseHTTPRequestHandler):
     server_version = "WitnessONE-Agent/" + VERSION
+    _LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
+    def _allowed_origin(self):
+        """The request Origin iff it is a localhost origin (the served UI's own
+        origin), else None. Never '*' — a foreign page must not be able to read
+        agent responses. Absent Origin (same-origin navigation/GET) → None, and
+        the caller simply omits ACAO, which same-origin requests don't need."""
+        origin = self.headers.get("Origin")
+        if not origin:
+            return None
+        try:
+            o = urlparse(origin)
+        except Exception:
+            return None
+        if o.scheme in ("http", "https") and o.hostname in self._LOCAL_HOSTS:
+            return origin
+        return None
+    def _guard(self):
+        """Same-origin / anti-DNS-rebinding gate on every request. Blocks hostile
+        cross-origin browser drive-by (CSRF write / SSRF scan) while leaving the
+        local same-origin UI untouched. Returns True to proceed, else sends 403."""
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]")
+        if host and host not in self._LOCAL_HOSTS:
+            self._json(403, {"error": "forbidden: unexpected Host (possible DNS rebinding)"})
+            return False
+        origin = self.headers.get("Origin")
+        if origin:
+            if self._allowed_origin() is None:
+                self._json(403, {"error": "forbidden: cross-origin request blocked"})
+                return False
+        else:  # no Origin: fall back to Referer when present
+            ref = self.headers.get("Referer")
+            if ref:
+                try: rh = urlparse(ref).hostname
+                except Exception: rh = None
+                if rh and rh not in self._LOCAL_HOSTS:
+                    self._json(403, {"error": "forbidden: cross-origin referer blocked"})
+                    return False
+        return True
     def _cors(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
+        origin = self._allowed_origin()
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Authorization,Content-Type")
     def _json(self, code, obj):
@@ -431,7 +569,12 @@ class H(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length") or 0)
         return json.loads(self.rfile.read(n) or b"null") if n else None
     def log_message(self, f, *a): print(f"  [{time.strftime('%H:%M:%S')}] {self.command} {self.path[:90]}")
-    def do_OPTIONS(self): self.send_response(204); self._cors(); self.end_headers()
+    def do_OPTIONS(self):
+        # Only satisfy CORS preflight for localhost origins; a foreign origin's
+        # preflight fails, so the browser never issues the real (JSON) request.
+        if self._allowed_origin() is None:
+            self.send_response(403); self.end_headers(); return
+        self.send_response(204); self._cors(); self.end_headers()
 
     def _proxy(self):
         which, rest = ("topserver", self.path[len("/proxy/config"):]) if self.path.startswith("/proxy/config") \
@@ -444,7 +587,7 @@ class H(BaseHTTPRequestHandler):
                                     data=body, method=self.command)
         for h in ("Authorization", "Content-Type"):
             if self.headers.get(h): rq.add_header(h, self.headers[h])
-        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+        ctx = _ssl_ctx()
         try:
             with urllib.request.urlopen(rq, context=ctx, timeout=10) as r:
                 d = r.read(); code = r.status; pid = r.headers.get("Project_ID")
@@ -458,6 +601,7 @@ class H(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(d))); self.end_headers(); self.wfile.write(d)
 
     def do_GET(self):
+        if not self._guard(): return
         u = urlparse(self.path)
         if u.path.startswith("/proxy/"): return self._proxy()
         if u.path == "/agent/status":
@@ -501,6 +645,7 @@ class H(BaseHTTPRequestHandler):
         self._json(404, {"error": "not found"})
 
     def do_POST(self):
+        if not self._guard(): return
         u = urlparse(self.path)
         if u.path.startswith("/proxy/"): return self._proxy()
         body = self._body() or {}
@@ -526,10 +671,15 @@ class H(BaseHTTPRequestHandler):
                     if tpl:
                         ranges = []
                         kinds = template_offsets(tpl)
+                        # offset -> original SPL addr, so scan results are reported
+                        # in the template's OWN address form (5- or 6-digit).
+                        addr_of = {(k, off): addr for k in kinds
+                                   for off, addr in kinds[k]}
                         for k, fc in (("input", 4), ("hold", 3), ("disc", 2)):
                             for lo, hi in cluster(kinds[k], gap=40, maxlen=200):
+                                base = addr_of[(k, lo)] - lo  # addr = base + offset
                                 ranges.append({"fc": fc, "start": max(0, lo - 4),
-                                               "count": (hi - lo + 1) + 12})
+                                               "count": (hi - lo + 1) + 12, "base": base})
                 if not ranges:
                     ranges = [{"fc": 4, "start": 0, "count": 120},
                               {"fc": 3, "start": 0, "count": 50},
@@ -571,10 +721,10 @@ class H(BaseHTTPRequestHandler):
                 kind, off = addr_split(addr)
                 m = Modbus(ip, port, unit, timeout=2.5); m.connect()
                 try:
-                    if kind in ("input", "holding"):
+                    if kind in ("input", "hold"):
                         v = m.read_words(4 if kind == "input" else 3, off, 1)[0]
                     else:
-                        v = m.read_bits(2 if kind == "discrete" else 1, off, 1)[0]
+                        v = m.read_bits(2 if kind == "disc" else 1, off, 1)[0]
                 finally:
                     m.close()
                 return self._json(200, {"ok": True, "addr": addr, "kind": kind, "value": v,
@@ -639,7 +789,14 @@ class H(BaseHTTPRequestHandler):
             elif isinstance(body.get("template"), dict) and body["template"].get("id") == tid:
                 t = body["template"]
                 t.setdefault("registry", {})["fieldUpdated"] = datetime.datetime.now().isoformat()
-                save_template(t); applied = True
+                # A field propose is a DRAFT, never an approved publish: coerce the
+                # derived revision to a suffixed field-draft so it cannot overwrite
+                # the approved witness-of-record SPL (_split_v1 hardcodes 'approved').
+                dev, rev = _split_v1(t)
+                rev["basedOn"] = rev["revId"]
+                rev["revId"] = _slug(rev["revId"]) + "-field-" + str(int(time.time()))
+                rev["status"] = "field-draft"
+                applied = bool(save_revision(tid, rev))
             pend = os.path.join(HERE, "pending_commits"); os.makedirs(pend, exist_ok=True)
             fn = os.path.join(pend, f"{tid}-{int(time.time())}.json")
             json.dump({"templateId": tid, "revId": body.get("revId"), "by": body.get("by"),
@@ -716,8 +873,11 @@ def _plausible(name, units, lo, hi):
     return 42.0
 
 def build_generic_maps(template):
-    """address-space maps for the emulator: {('hold'|'input') offset: fn(t)->word, 'disc' offset: bit}"""
-    words, bits = {}, {}
+    """address-space maps for the emulator, kept SEPARATE per Modbus table so
+    holding (FC03) and input (FC04) never collide on a shared offset:
+      words = {'hold': {off: fn(t)->word|word}, 'input': {...}}, bits = {disc off: bit}
+    Coil ('coil' kind) addresses are not served by this emulator and are dropped."""
+    words, bits = {"hold": {}, "input": {}}, {}
     order = template.get("wordOrder", "hilo")
     for p in template["spl"]["points"]:
         base = _plausible(p.get("name"), p.get("units"), p.get("min"), p.get("max"))
@@ -728,12 +888,16 @@ def build_generic_maps(template):
             k, off = addr_split(a)
             if k == "disc":
                 bits[off] = 0
-            elif p.get("bit") is not None:
+                continue
+            if k not in ("hold", "input"):
+                continue  # coils are not emulated on the FC03/FC04 word tables
+            tgt = words[k]
+            if p.get("bit") is not None:
                 bit = int(p["bit"]); nl = (p.get("name") or "").lower()
                 on = 1 if any(w in nl for w in ("closed", "spring", "connected", "ready", "normal", "on ")) else 0
-                cur = words.get(off); prev = cur(0) if callable(cur) else 0
+                cur = tgt.get(off); prev = cur(0) if callable(cur) else 0
                 word = (prev | (on << bit)) & 0xFFFF
-                words[off] = (lambda w: (lambda t: w))(word)
+                tgt[off] = (lambda w: (lambda t: w))(word)
             elif p.get("span32"):
                 v = base * (1 + 0.004 * math.sin(time.time() / 9 + off))
                 if p.get("regType") == "float32":
@@ -744,8 +908,8 @@ def build_generic_maps(template):
                             return w if order == "hilo" else (w[1], w[0])
                         return f
                     pair = mk(off, base)
-                    words[off] = (lambda g: (lambda t: g(t)[0]))(pair)
-                    words[off + 1] = (lambda g: (lambda t: g(t)[1]))(pair)
+                    tgt[off] = (lambda g: (lambda t: g(t)[0]))(pair)
+                    tgt[off + 1] = (lambda g: (lambda t: g(t)[1]))(pair)
                 else:  # 32int
                     def mk32(offc, basev, g):
                         def f(t):
@@ -754,11 +918,11 @@ def build_generic_maps(template):
                             return (hi, lo2) if order == "hilo" else (lo2, hi)
                         return f
                     pair = mk32(off, base, gain)
-                    words[off] = (lambda g2: (lambda t: g2(t)[0]))(pair)
-                    words[off + 1] = (lambda g2: (lambda t: g2(t)[1]))(pair)
+                    tgt[off] = (lambda g2: (lambda t: g2(t)[0]))(pair)
+                    tgt[off + 1] = (lambda g2: (lambda t: g2(t)[1]))(pair)
             else:
                 if (p.get("regType") == "Boolean") or (p.get("stateTable") and p.get("min") is None):
-                    words[off] = (lambda t: 0)
+                    tgt[off] = (lambda t: 0)
                 else:
                     def mk16(offc, basev, g, sub):
                         def f(t):
@@ -766,7 +930,7 @@ def build_generic_maps(template):
                             raw = int(round(val / g))
                             return raw & 0xFFFF
                         return f
-                    words[off] = mk16(off, base, gain, ai)
+                    tgt[off] = mk16(off, base, gain, ai)
     return words, bits
 
 def start_template_device(port, template):
@@ -791,9 +955,10 @@ def start_template_device(port, template):
                 t = time.time() - t0
                 if fc in (3, 4):
                     start, cnt = struct.unpack(">HH", body[1:5])
+                    tbl = words["input"] if fc == 4 else words["hold"]
                     vals = []
                     for i in range(cnt):
-                        fn = words.get(start + i)
+                        fn = tbl.get(start + i)
                         vals.append((fn(t) if callable(fn) else (fn or 0)) & 0xFFFF)
                     reply(struct.pack(">BB", fc, cnt * 2) + struct.pack(">" + "H" * cnt, *vals))
                 elif fc == 2:
@@ -804,7 +969,7 @@ def start_template_device(port, template):
                     reply(struct.pack(">BB", fc, nb) + bytes(buf))
                 elif fc == 6:
                     addr, val = struct.unpack(">HH", body[1:5])
-                    words[addr] = (lambda v: (lambda t2: v))(val)
+                    words["hold"][addr] = (lambda v: (lambda t2: v))(val)  # FC06 writes holding only
                     reply(body[:5])
                 else:
                     reply(struct.pack(">BB", fc | 0x80, 2))
@@ -875,6 +1040,9 @@ if __name__ == "__main__":
     ap.add_argument("--topserver", default=None, help="TOP Server Configuration API base URL (proxied at /proxy/config)")
     ap.add_argument("--iot", default=None, help="IoT Gateway REST base URL (proxied at /proxy/iot)")
     ap.add_argument("--remote", default=None, help="central registry DB API base URL (pull/push/verify)")
+    ap.add_argument("--insecure-tls", action="store_true",
+                    help="disable TLS certificate verification for --topserver/--iot/--remote "
+                         "(ONLY for known self-signed lab servers; unsafe on shared networks)")
     ap.add_argument("--ui", default=None, help="path to WitnessONE.html (auto-resolved if omitted)")
     ap.add_argument("--headless", action="store_true", help="don't open the app window")
     ap.add_argument("--demo-device", action="store_true", help="start the built-in XDU1350B Modbus emulator")
@@ -890,10 +1058,10 @@ if __name__ == "__main__":
         try:
             m = Modbus(host, prt, ARGS.unit, timeout=3.0); m.connect()
             try:
-                if kind in ("input", "holding"):
+                if kind in ("input", "hold"):
                     v = m.read_words(4 if kind == "input" else 3, off, 1)[0]
                 else:
-                    v = m.read_bits(2 if kind == "discrete" else 1, off, 1)[0]
+                    v = m.read_bits(2 if kind == "disc" else 1, off, 1)[0]
             finally:
                 m.close()
             print(f"OK    {ARGS.addr} = {v}   ({int((time.time()-t0)*1000)} ms · real Modbus TCP)")
@@ -906,6 +1074,9 @@ if __name__ == "__main__":
     url = f"http://127.0.0.1:{ARGS.port}"
     print(f"WitnessONE v{VERSION} · {url}")
     print(f"  templates: {tpl_dir()} ({len(load_templates())})")
+    for _t in load_templates():
+        for _w in validate_point_fcs(_t):
+            print("  ! FC mismatch (SPL declares one table, address implies another):", _w)
     print(f"  records  : {DB_PATH}")
     print(f"  remote registry: {ARGS.remote or '— (verify/propose queue locally)'}")
     print(f"  UI       : {'serving ' + UI_PATH if UI_PATH and os.path.exists(UI_PATH) else 'not found (API only)'}")

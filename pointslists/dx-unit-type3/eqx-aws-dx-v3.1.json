@@ -300,7 +300,7 @@
     "count": "1",
     "bit": null,
     "span32": false,
-    "regType": "16int",
+    "regType": "Boolean",
     "signed": "No",
     "readFC": "03",
     "writeFC": null,

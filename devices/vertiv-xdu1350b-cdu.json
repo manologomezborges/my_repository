@@ -32,7 +32,8 @@
   "lastVerified": "2026-07-23",
   "verifiedBy": "MG",
   "source": "Equinix SPL 1.0 workbook (approved)",
-  "complianceStatus": "Compliant & Deviations"
+  "complianceStatus": "Compliant & Deviations",
+  "maintenance": "hand-maintained — not reproducible via tools/parse_points.py; devices/ + pointslists/ are the source of truth (see DATA-8)"
  },
  "defaultPointsList": "spl-1.0"
 }

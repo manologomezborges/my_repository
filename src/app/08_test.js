@@ -405,23 +405,30 @@ function wTick(){
 FWT.baseResults=function(){
   const rows=DB.points.map(p=>{const r=RD(p.id);
     let res='PASS',note='';
+    // same range test FWT01 applies — gain-scaled value must sit inside declared min/max
+    const inRange = !(r&&r.vals) || p.min==null || r.vals.every(v=>v>=p.min-1e-9&&v<=p.max+1e-9);
     if(r&&r.custom&&!r.vals){res='NA';note='Field-added — verify live';}
     else if(r&&r.na){res='NA';note=r.note||'';}
     else if(p.id==='P01'){res='DEFER';note='DCOS software point';}
     else if(!(r&&r.q&&r.q.code===192)){res='FAIL';note=r&&r.q?r.q.txt:'no read';}
+    else if(!inRange){res='DEV';note='Observation — value outside declared range; verify range/scale';}
     else if(p.compliance==='Deviation'){res='DEV';note='Approved SPL deviation';}
     return {id:p.id,name:p.name,addr:p.addrRaw?p.addrRaw.replace(/\n/g,', '):'—',
       raw:r&&r.raws?r.raws.join('/'):'—',val:r?r.txt:'—',units:p.units||'',q:r&&r.q?r.q.txt:'—',res,note};});
   const _T=window.W1_ACTIVE_TEMPLATE||{class:'CDU',fwtScript:'FWT-CDU-01-R2'};
   const _tag={CDU:'CDU-01',UPS:'UPS-01','LV BREAKER':'ACB-01','DX UNIT':'DX-01','POWER METER':'PM-01'}[_T.class]||'AST-01';
+  // Verdict is DERIVED from the rows just built — never hardcoded. A single FAIL
+  // row (bad quality / unreadable register) holds the certificate.
+  const failN=rows.filter(x=>x.res==='FAIL').length;
+  const devN=rows.filter(x=>x.res==='DEV').length;
   return {startedAt:new Date().toISOString(),finishedAt:new Date().toISOString(),cfg:{...SIM.cfg},meta:DB.meta,
     assetClass:_T.class,assetTag:_tag,scriptId:_T.fwtScript||'FWT-01-R1',
     splVersion:_T.registry.splVersion,revId:_T.registry.revId,revStatus:_T.registry.revStatus||'approved',
     steps:[],p2p:rows,punch:[],witnessed:[],
     dataSource:(window.LIVE&&LIVE.valuesLive&&LIVE.source==='agent')?`LIVE — Direct Modbus via WitnessONE Agent · ${SIM.cfg.ip}:${SIM.cfg.port}.${SIM.cfg.unit}`
       :(window.LIVE&&LIVE.valuesLive)?'LIVE — TOP Server gateway':'SIMULATED — WitnessONE register model',
-    overall:'PASS — WITNESSED FIELD SESSION',
-    shipRec:'RED TAG applied — Confirmation to Ship recommended'};
+    overall:failN>0?'FAIL — POINT-TO-POINT FAILURES OPEN':(devN>0?'PASS WITH APPROVED DEVIATIONS':'PASS — WITNESSED FIELD SESSION'),
+    shipRec:failN>0?'HOLD — do not issue Confirmation to Ship':'RED TAG applied — Confirmation to Ship recommended'};
 };
 function tdMode(m){
   $('tdModeSim').classList.toggle('on',m==='sim');
@@ -498,7 +505,10 @@ async function runAll(){
   FWT.results.finishedAt=new Date().toISOString();
   buildPunch(fails);
   const anyFail=fails>0;
-  FWT.results.overall=anyFail?'FAIL — CRITICAL PUNCH ITEMS OPEN':(devs||FWT.results.punch.some(p=>p.status==='OPEN')?'PASS WITH APPROVED DEVIATIONS':'PASS');
+  // Only genuine OPEN problems (Critical/Major) block a clean PASS — by-design
+  // Minor carry-forward items (e.g. DCOS point deferred to L4) must not.
+  const openBlockers=FWT.results.punch.some(p=>p.status==='OPEN'&&(p.sev==='Critical'||p.sev==='Major'));
+  FWT.results.overall=anyFail?'FAIL — CRITICAL PUNCH ITEMS OPEN':(devs||openBlockers?'PASS WITH APPROVED DEVIATIONS':'PASS');
   FWT.results.shipRec=anyFail?'HOLD — do not issue Confirmation to Ship':'RED TAG applied — Confirmation to Ship recommended';
   $('btnTdRun').disabled=false;$('btnTdAbort').disabled=true;$('btnTdReport').disabled=false;
   $('btnReport').disabled=false;
@@ -512,12 +522,16 @@ async function runAll(){
 }
 function buildPunch(fails){
   const P=FWT.results.punch;
-  P.push({no:1,sev:'Minor',status:'CLOSED',item:'P16 Primary Filter ΔP not applicable — no primary filter in XDU1350B STD build',
-    action:'SPL deviation approved (Equinix) — point documented N/A',owner:'Vendor / Equinix Cx'});
-  P.push({no:2,sev:'Minor',status:'CLOSED',item:'P21 Pump B Low Flow covered by 3-pump aggregate logic (single 10029 register)',
-    action:'SPL deviation approved — aggregate alarm accepted',owner:'Vendor'});
-  P.push({no:3,sev:'Minor',status:'OPEN',item:'P01 Communication Alarm is a DCOS software point — not testable at factory',
-    action:'Carry to Level 4 BMS integration test',owner:'Equinix Cx (L4)'});
+  // These three items are specific to the XDU1350B CDU SPL — only seed them for
+  // the CDU, never on a UPS/breaker/meter certificate.
+  if(SIM.isCDU){
+    P.push({no:1,sev:'Minor',status:'CLOSED',item:'P16 Primary Filter ΔP not applicable — no primary filter in XDU1350B STD build',
+      action:'SPL deviation approved (Equinix) — point documented N/A',owner:'Vendor / Equinix Cx'});
+    P.push({no:2,sev:'Minor',status:'CLOSED',item:'P21 Pump B Low Flow covered by 3-pump aggregate logic (single 10029 register)',
+      action:'SPL deviation approved — aggregate alarm accepted',owner:'Vendor'});
+    P.push({no:P.length+1,sev:'Minor',status:'OPEN',item:'P01 Communication Alarm is a DCOS software point — not testable at factory',
+      action:'Carry to Level 4 BMS integration test',owner:'Equinix Cx (L4)'});
+  }
   FWT.results.steps.filter(s=>s.status==='fail').forEach((s,i)=>{
     P.push({no:P.length+1,sev:'Critical',status:'OPEN',item:`${s.id} ${s.name} FAILED — ${s.actual}`,
       action:'Vendor rectification + retest required before shipment',owner:'Vendor'});});

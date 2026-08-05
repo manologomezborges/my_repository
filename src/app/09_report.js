@@ -4,17 +4,37 @@
 const REPORT=window.REPORT={};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
-function certNo(R){const d=new Date();const p=n=>String(n).padStart(2,'0');
+/* CERT-4: derive the effective run start from the witnessed timeline when available
+   (baseResults currently stamps startedAt/finishedAt at synthesis time — see followups). */
+function runStart(R){
+  let t=R&&R.startedAt?+new Date(R.startedAt):NaN;
+  if(R&&R.witnessed&&R.witnessed.length){
+    R.witnessed.forEach(w=>[w.armedAt,w.trigAt,w.recAt].forEach(x=>{
+      if(x){const n=+new Date(x);if(!isNaN(n)&&(isNaN(t)||n<t))t=n;}}));}
+  return isNaN(t)?Date.now():t;}
+function runEnd(R){
+  let t=R&&R.finishedAt?+new Date(R.finishedAt):NaN;
+  if(R&&R.witnessed&&R.witnessed.length){
+    R.witnessed.forEach(w=>[w.armedAt,w.trigAt,w.recAt].forEach(x=>{
+      if(x){const n=+new Date(x);if(!isNaN(n)&&(isNaN(t)||n>t))t=n;}}));}
+  return isNaN(t)?Date.now():t;}
+/* CERT-4: build the certificate number once, from the run start (not render time). */
+function certNo(R){const d=new Date(runStart(R));const p=n=>String(n).padStart(2,'0');
   const tag=(R&&R.assetTag)||'CDU-01';
   return `FWT-${tag}-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}·R0`;}
+/* CERT-3: this is the 05_sim.js demo cfg.serial constant, not a captured serial —
+   never print it as a real serial. Proper fix: capture serial on the connect form
+   into SIM.cfg.serial (05_sim.js/08_test.js — see followups). */
+const SERIAL_PLACEHOLDER='VXDU1350B-2647-0114';
 const RES_CLS={PASS:'P',DEV:'D',FAIL:'F',NA:'N',DEFER:'N',pass:'P',dev:'D',fail:'F',na:'N'};
 const RES_TXT={pass:'PASS',dev:'PASS ▲DEV',fail:'FAIL',na:'N/A'};
 
 function paperHTML(R){
-  const no=certNo(R);
-  const dt=new Date(R.startedAt);
-  const fin=new Date(R.finishedAt);
-  const dur=Math.round((fin-dt)/1000);
+  const no=R.certNo||(R.certNo=certNo(R));
+  const dt=new Date(runStart(R));
+  const fin=new Date(runEnd(R));
+  const dur=Math.max(0,Math.round((fin-dt)/1000));
+  const simDeck=!!(R.steps&&R.steps.length);
   const vb=R.overall.startsWith('PASS WITH')?'warn':(R.overall.startsWith('FAIL')?'fail':'');
   const p2pRows=R.p2p.map(r=>`<tr><td class="num">${r.id}</td><td>${esc(r.name)}</td><td class="num">${esc(r.addr)}</td>
     <td class="num">${esc(r.raw)}</td><td class="num">${esc(r.val)} ${esc(r.units)}</td><td class="num">${esc(r.q)}</td>
@@ -46,11 +66,11 @@ function paperHTML(R){
       <div><span>Equipment / tag</span><b>${esc(R.assetClass||'Asset')} · ${esc(R.assetTag||'AST-01')}</b></div>
       <div><span>Make</span><b>${esc(R.meta.Make)}</b></div>
       <div><span>Model</span><b>${esc(R.meta.Model)}</b></div>
-      <div><span>Serial No.</span><b>${esc((R.assetClass==='CDU'?R.cfg.serial:null)||'(record on unit)')}</b></div>
+      <div><span>Serial No.</span><b>${esc((()=>{const s=R.assetClass==='CDU'?R.cfg.serial:null;return s&&s!==SERIAL_PLACEHOLDER?s:'(record on unit)';})())}</b></div>
       <div><span>Firmware</span><b>${esc(R.cfg.fw)} (SPL-approved: ${esc(R.meta['Firmware Version'])})</b></div>
       <div><span>Points list</span><b>${esc(window.W1_SPLFMT?W1_SPLFMT(R.splVersion||R.meta['Equinix Point List Version:']):(R.splVersion||''))}${R.revStatus&&R.revStatus!=='approved'?' <span style="color:#b45309">[FIELD DRAFT — pending registry approval]</span>':''} — ${esc(R.meta['Asset Compliance Status'])}</b></div>
       <div><span>Test date</span><b>${dt.toLocaleString()}</b></div>
-      <div><span>Duration</span><b>${dur}s (accelerated demo)</b></div>
+      <div><span>Duration</span><b>${dur}s${simDeck?' (accelerated demo)':''}</b></div>
       <div><span>Location</span><b>Vendor factory — witness bay</b></div>
       <div><span>Data path</span><b>${esc((R.dataSource||'').startsWith('LIVE — Direct')?'Direct Modbus TCP/IP':'TOP Server v7.1 · Modbus TCP/IP')} · ${esc(R.cfg.ip)}:${R.cfg.port}.${R.cfg.unit}</b></div>
       <div><span>Test platform</span><b>WitnessONE v0.8.2 MVP</b></div>
@@ -59,11 +79,12 @@ function paperHTML(R){
     </div>
 
     <h2>2 · Pre-test verification</h2>
+    <div style="font-size:9.5px;color:#6b7280;margin-bottom:3px">The tool does not evaluate the checks below — the witness records the result of each against the asset's acceptance pack before signing (click a cell to mark).</div>
     <table><tr><th>Check</th><th style="width:64px">Result</th></tr>
-      <tr><td>Unit assembled per approved drawings; QA documentation pack complete</td><td class="P">PASS</td></tr>
-      <tr><td>Instrument / sensor calibration certificates current for metered points</td><td class="P">PASS</td></tr>
-      <tr><td>Mechanical / electrical integrity witnessed per the asset's acceptance checklist</td><td class="P">PASS</td></tr>
-      <tr><td>Electrical safety: supply, earthing, protective devices verified</td><td class="P">PASS</td></tr>
+      <tr><td>Unit assembled per approved drawings; QA documentation pack complete</td><td contenteditable="true">—</td></tr>
+      <tr><td>Instrument / sensor calibration certificates current for metered points</td><td contenteditable="true">—</td></tr>
+      <tr><td>Mechanical / electrical integrity witnessed per the asset's acceptance checklist</td><td contenteditable="true">—</td></tr>
+      <tr><td>Electrical safety: supply, earthing, protective devices verified</td><td contenteditable="true">—</td></tr>
       <tr><td>Comms established: Modbus TCP session · ${R.p2p.length} tags · OPC quality GOOD (192)</td><td class="P">PASS</td></tr></table>
 
     <h2>3 · Point-to-point verification — ${esc(R.meta['Equinix Point List Version:'])} (${R.p2p.length} points)</h2>
@@ -89,9 +110,9 @@ function paperHTML(R){
     <h2>6 · Attendance &amp; approval</h2>
     <div style="font-size:10.5px;color:#374151;margin-bottom:6px">Minimum attendance per Level 1 practice: vendor representative, owner's commissioning provider (CxA), owner/GC representative. Results reviewed against pre-agreed script ${esc(R.scriptId||'FWT-01')}; both parties retain signed copies.</div>
     <div class="sig">
-      <div class="box"><b contenteditable="true">Vendor Representative</b><span contenteditable="true">Name · ${esc(R.meta.Make)}</span><br>Signature / date: ____________</div>
-      <div class="box"><b contenteditable="true">Commissioning Agent (CxA)</b><span contenteditable="true">Name · Equinix Cx</span><br>Signature / date: ____________</div>
-      <div class="box"><b contenteditable="true">Owner / GC Representative</b><span contenteditable="true">Name · Equinix</span><br>Signature / date: ____________</div>
+      <div class="box"><b>Vendor Representative</b><span contenteditable="true">Name · ${esc(R.meta.Make)}</span><br>Signature / date: ____________</div>
+      <div class="box"><b>Commissioning Agent (CxA)</b><span contenteditable="true">Name · Equinix Cx</span><br>Signature / date: ____________</div>
+      <div class="box"><b>Owner / GC Representative</b><span contenteditable="true">Name · Equinix</span><br>Signature / date: ____________</div>
     </div>
 
     <div class="foot">

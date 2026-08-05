@@ -16,7 +16,7 @@
   "version": "1.1.0",
   "splVersion": "Vendor map (curated)",
   "complianceStatus": "Curated",
-  "source": "Schneider PM8000 Modbus Map (curated 27-point metering set)",
+  "source": "Schneider PM8000 Modbus Map (curated metering set — 25 of 27 requested points present; 'Voltage Unbalance' and 'Current Unbalance' had no usable register in the source map and are not shipped)",
   "lastVerified": "2026-07-24",
   "verifiedBy": "MG",
   "pendingCommit": null
