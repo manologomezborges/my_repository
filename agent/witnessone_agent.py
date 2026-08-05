@@ -296,17 +296,24 @@ def validate_point_fcs(template):
     implied by the address prefix (addr_split). The Agent resolves the table from
     the ADDRESS, so a mismatch means the SPL's declared FC is silently ignored and
     a different register is read/written — surface it rather than certify blindly."""
+    def _fc(v):
+        # A declared FC only counts if it parses to an int; strings like "N/A"
+        # or "" are "not applicable" markers, not a contradictory declaration.
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return None
     warns = []
     for p in (template.get("spl", {}).get("points") or []):
         pid = p.get("id") or p.get("name") or "?"
         for a in (p.get("addrs") or []):
             kind, _ = addr_split(a)
             exp = _FC_FOR_KIND.get(kind)
-            rfc = p.get("readFC")
-            if rfc is not None and exp is not None and int(rfc) != exp:
+            rfc = _fc(p.get("readFC"))
+            if rfc is not None and exp is not None and rfc != exp:
                 warns.append(f"{template.get('id')}/{pid}: addr {a} is {kind} "
                              f"(FC{exp}) but declares readFC={rfc}")
-            wfc = p.get("writeFC")
+            wfc = _fc(p.get("writeFC"))
             if wfc is not None and kind in ("input", "disc"):
                 warns.append(f"{template.get('id')}/{pid}: addr {a} is read-only "
                              f"{kind} but declares writeFC={wfc}")
