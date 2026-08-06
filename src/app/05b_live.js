@@ -16,6 +16,17 @@ const LIVE=window.LIVE={
 
 /* ---------------- HTTP core ---------------- */
 function join(base,path){return base.replace(/\/+$/,'')+path;}
+/* v0.8.3 P1: Modbus function code implied by an SPL address prefix (matches the
+   agent's addr_split): 1xxxx→FC02 discrete, 3xxxx→FC04 input, 4xxxx→FC03 holding. */
+LIVE.fcForAddr=function(a){const s=String(a==null?'':a);return s[0]==='1'?2:(s[0]==='4'?3:4);};
+/* v0.8.3 P1: bind a provenance session to the preflight evidence that just passed.
+   sessionId + preflight are stamped on the certificate; staleMs is the freshness
+   window a live per-point read must beat to count as GOOD on the certificate. */
+LIVE.mintSession=function(pf){
+  LIVE.sessionId='W1S-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7);
+  LIVE.preflight=pf||null;
+  LIVE.staleMs=Math.max(3*((window.SIM&&SIM.pollMs)||1000),5000);
+};
 LIVE.call=async function(path,{method='GET',body=null,timeout=6500,iot=false}={}){
   const base=iot?(LIVE.cfg.iot||LIVE.cfg.base):LIVE.cfg.base;
   const url=join(base,path);
@@ -236,15 +247,16 @@ LIVE.install=function(){
     const g=p.gain||1,rt=(p.regType||'').toLowerCase();
     let dec=DECOF(g);if(rt==='float32'&&dec<1)dec=2;
     const lv=LIVE.st.values[id];
-    const stale=!!(lv&&lv.ts!=null&&(Date.now()-lv.ts)>(LIVE.staleMs||15000));
+    const stale=!!(lv&&lv.ts!=null&&(Date.now()-lv.ts)>(LIVE.staleMs||5000));
+    const fc=LIVE.fcForAddr(p.addrs[0]);
     // LIVE session but no FRESH device data: report BAD honestly. Never fall
     // back to the simulator here — a certificate that declares itself LIVE must
     // never carry fabricated GOOD values for registers that were never read.
-    if(!lv||stale)return {id,vals:null,raws:null,dec,
+    if(!lv||stale)return {id,vals:null,raws:null,dec,fc,ts:(lv&&lv.ts)||null,
       q:{code:24,txt:'BAD ('+(stale?'stale — no fresh live read':'no live data')+')'},
       txt:'—',stale:true,degraded:true};
     const allBad=lv.ok.every(o=>!o);
-    if(allBad)return {id,vals:null,raws:null,dec,
+    if(allBad)return {id,vals:null,raws:null,dec,fc,ts:lv.ts||null,
       q:{code:24,txt:'BAD ('+(lv.reasons.find(x=>x)||'no data')+')'},txt:'—',stale:true,degraded:true};
     const vals=lv.raws.map(r2=>(r2==null?0:r2)*g);
     const isBin=rt.includes('bool')||p.bit!=null;
@@ -253,7 +265,7 @@ LIVE.install=function(){
     else if(SIM.isCDU&&id==='P25'){txt=vals.map(v=>v?'FLT':'OK').join('/');alarm=vals.some(v=>v);}
     else if(isBin){txt=vals.map(v=>v?'ALARM':'NORM').join(' / ');alarm=vals.some(v=>v);}
     else txt=vals.map(v=>v.toFixed(dec)).join(' / ');
-    return {id,vals,raws:lv.raws,dec,q:{code:192,txt:'GOOD (192) · LIVE'},txt,alarm,live:true};
+    return {id,vals,raws:lv.raws,dec,fc,ts:lv.ts||null,q:{code:192,txt:'GOOD (192) · LIVE'},txt,alarm,live:true};
   };
 };
 LIVE.applyToTwin=function(){

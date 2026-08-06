@@ -422,12 +422,12 @@ async function liveConnect(){
       /* ② first register of the SELECTED SPL revision */
       const fp=window.SPL_DB.points.find(p=>p.addrs&&p.addrs.length);
       const fAddr=fp?fp.addrs[0]:30001;
-      let mOK=false;
+      let mOK=false, pbRaw=null;   // pbRaw hoisted so the preflight read value survives into the session mint below
       if(pg.ok){
         hsLine(`Pre-flight ② · first SPL point — ${fp?fp.id+' '+fp.name.slice(0,26):''} @ <span class="acc">${fAddr}</span> …`);
         const pb=await W1AGENT.probe({ip,port:+port||502,unit:+unit||1,addr:fAddr});bar(40);
         if(myGen!==hsGen)return; // cancelled while the register probe was in flight
-        if(pb.ok){mOK=true;
+        if(pb.ok){mOK=true;pbRaw=pb.value;
           hsLine(`  <span class="ok">✔ ${fAddr} = ${pb.value}</span> (${pb.ms} ms) — REAL MODBUS CONFIRMED`);}
         else hsLine(`  <span class="err">✕ register read failed — ${String(pb.error||'no response').slice(0,60)}</span> <span class="dim">(unit ID right? Modbus enabled on the unit?)</span>`);
       }else bar(40);
@@ -436,8 +436,13 @@ async function liveConnect(){
         const pr=await LIVE.agentProbe();bar(80);
         if(myGen!==hsGen)return; // cancelled while the block-read confirmation was in flight
         if(pr.ok){LIVE.valuesLive=true;LIVE.source='agent';
+          /* v0.8.3 P1: mint a provenance session bound to the preflight evidence
+             that just passed (① ping + ② real register read). This session id and
+             preflight record are stamped on the certificate. */
+          LIVE.mintSession({pingMs:pg.ms,probeAddr:fAddr,probeRaw:pbRaw,at:new Date().toISOString()});
           const n=Object.keys((pr.raw.data||{}).values||{}).length;
           hsLine(`Direct Modbus → <span class="ok">${n} registers per block-read cycle (FC04 · FC03 · FC02)</span> — FULL LIVE telemetry`);
+          hsLine(`Session <span class="acc">${LIVE.sessionId}</span> — provenance seal active`,'dim');
           hsLine(`Writes <span style="color:var(--warn)">DISARMED</span> — polling is read-only until armed on the bench`,'dim');}
         else hsLine(`Block read failed after a good probe (${pr.raw&&(pr.raw.status||pr.raw.err)}) — <span style="color:var(--warn)">values stay SIMULATED</span>`);
       }else{
@@ -470,7 +475,9 @@ async function liveConnect(){
       const pr=await LIVE.iotProbe();bar(88);
       if(myGen!==hsGen)return; // cancelled while probing the IoT Gateway
       if(pr.ok){LIVE.valuesLive=true;LIVE.source='iot';
-        hsLine(`Live values → <span class="ok">/iotgateway/read OK</span> — FULL LIVE telemetry (${LIVE.st.tagTotal} registers)`);}
+        LIVE.mintSession({pingMs:null,probeAddr:'iotgateway/read',probeRaw:null,at:new Date().toISOString()});
+        hsLine(`Live values → <span class="ok">/iotgateway/read OK</span> — FULL LIVE telemetry (${LIVE.st.tagTotal} registers)`);
+        hsLine(`Session <span class="acc">${LIVE.sessionId}</span> — provenance seal active`,'dim');}
       else hsLine(`IoT Gateway not responding (${pr.raw&&(pr.raw.status||pr.raw.err)}) — <span style="color:var(--warn)">values stay SIMULATED</span>`);
     }else{bar(88);
       hsLine(`No IoT Gateway URL — config is LIVE, values SIMULATED (add the gateway URL for live values)`,'dim');}

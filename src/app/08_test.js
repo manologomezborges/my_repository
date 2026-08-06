@@ -94,6 +94,15 @@ const TESTS=[
 {id:'FWT01',name:'Point-to-point verification — all SPL points',desc:'Read every register: raw → gain → range & quality check',
  async run(c){
   const rows=[];let pass=0,dev=0,na=0;
+  // v0.8.3 P0: never start a point-to-point over a dead live link — every point
+  // would read STALE/BAD. Make the operator restore the link first (the twin keeps
+  // showing last values under the LINK LOST banner; the certificate must not).
+  if(window.LIVE&&LIVE.valuesLive&&LIVE.st.failCount>=2){
+    try{toast('LINK LOST — restore the link before point-to-point','err',4200);}catch(e){}
+    c.line('<span style="color:var(--crit)">✕ LINK LOST — point-to-point not started. Restore the live link and re-run.</span>');
+    return {status:'fail',expected:'live link up before point-to-point',
+      actual:'LINK LOST — point-to-point not started'};
+  }
   for(const p of PTS){
     if(abortFlag)break;
     const r=SIM.read(p.id);let res,note='';
@@ -110,7 +119,8 @@ const TESTS=[
       else{res='PASS';pass++;}
     }
     rows.push({id:p.id,name:p.name,addr:p.addrRaw?p.addrRaw.replace(/\n/g,', '):(p.id==='P26'?'DCOSC calc':'DCOS'),
-      raw:r.raws?r.raws.join('/'):'—',val:r.txt,units:p.units||'',q:r.q.txt,res,note});
+      raw:r.raws?r.raws.join('/'):'—',val:r.txt,units:p.units||'',q:r.q.txt,res,note,
+      ts:r.ts||null,fc:r.fc||null});   // v0.8.3 P1: per-value read time + function code (LIVE only)
     const col=res==='PASS'?'var(--good)':res==='DEV'?'var(--warn)':res==='FAIL'?'var(--crit)':'var(--txt3)';
     c.line(`<span style="color:${col}">●</span> ${p.id} ${p.name} <span class="p2p">· ${p.addrRaw?p.addrRaw.replace(/\n/g,', '):'—'} · raw ${r.raws?r.raws.join('/'):'—'} → <b>${r.txt}</b> ${p.units||''}</span> <b style="color:${col}">${res}</b>${note?` <span class="p2p">— ${note}</span>`:''}`);
     UI.selectPoint(p.id);
@@ -446,7 +456,8 @@ FWT.baseResults=function(){
     else if(rng==='out'){res='DEV';note='Observation — value outside declared range; verify range/scale';}
     else if(p.compliance==='Deviation'){res='DEV';note='Approved SPL deviation';}
     return {id:p.id,name:p.name,addr:p.addrRaw?p.addrRaw.replace(/\n/g,', '):'—',
-      raw:r&&r.raws?r.raws.join('/'):'—',val:r?r.txt:'—',units:p.units||'',q:r&&r.q?r.q.txt:'—',res,note};});
+      raw:r&&r.raws?r.raws.join('/'):'—',val:r?r.txt:'—',units:p.units||'',q:r&&r.q?r.q.txt:'—',res,note,
+      ts:(r&&r.ts)||null,fc:(r&&r.fc)||null};});   // v0.8.3 P1
   const _T=window.W1_ACTIVE_TEMPLATE||{class:'CDU',fwtScript:'FWT-CDU-01-R2'};
   const _tag={CDU:'CDU-01',UPS:'UPS-01','LV BREAKER':'ACB-01','DX UNIT':'DX-01','POWER METER':'PM-01'}[_T.class]||'AST-01';
   // Verdict is DERIVED from the rows just built — never hardcoded. A single FAIL
@@ -456,6 +467,7 @@ FWT.baseResults=function(){
   return {startedAt:new Date().toISOString(),finishedAt:new Date().toISOString(),cfg:{...SIM.cfg},meta:DB.meta,
     assetClass:_T.class,assetTag:_tag,scriptId:_T.fwtScript||'FWT-01-R1',
     splVersion:_T.registry.splVersion,revId:_T.registry.revId,revStatus:_T.registry.revStatus||'approved',
+    sessionId:(window.LIVE&&LIVE.sessionId)||null,preflight:(window.LIVE&&LIVE.preflight)||null,pollMs:SIM.pollMs,  // v0.8.3 P1
     steps:[],p2p:rows,punch:[],witnessed:[],
     dataSource:(window.LIVE&&LIVE.valuesLive&&LIVE.source==='agent')?`LIVE — Direct Modbus via WitnessONE Agent · ${SIM.cfg.ip}:${SIM.cfg.port}.${SIM.cfg.unit}`
       :(window.LIVE&&LIVE.valuesLive)?'LIVE — TOP Server gateway':'SIMULATED — WitnessONE register model',
@@ -509,6 +521,7 @@ async function runAll(){
   FWT.results={startedAt:new Date().toISOString(),cfg:{...SIM.cfg},meta:DB.meta,steps:[],p2p:[],punch:[],
     assetClass:_T.class,assetTag:_tag,scriptId:_T.fwtScript||'FWT-01-R1',
     splVersion:_T.registry.splVersion,revId:_T.registry.revId,revStatus:_T.registry.revStatus||'approved',
+    sessionId:(window.LIVE&&LIVE.sessionId)||null,preflight:(window.LIVE&&LIVE.preflight)||null,pollMs:SIM.pollMs,  // v0.8.3 P1
     dataSource:(window.LIVE&&LIVE.valuesLive&&LIVE.source==='agent')?`LIVE — Direct Modbus via WitnessONE Agent · ${SIM.cfg.ip}:${SIM.cfg.port}.${SIM.cfg.unit}${LIVE.configOk?' · TOP Server config verified':''}`
       :(window.LIVE&&LIVE.valuesLive)?`LIVE — ${(LIVE.st.about||{}).product_name||'TOP Server'} ${(LIVE.st.about||{}).product_version||''} · Config API + live gateway · ${LIVE.target.ch}.${LIVE.target.dev}`
       :(window.LIVE&&LIVE.enabled)?`HYBRID — configuration LIVE on ${(LIVE.st.about||{}).product_name||'TOP Server'} (${LIVE.target.ch}.${LIVE.target.dev} provisioned via /config/v1) · values simulated`
@@ -548,8 +561,9 @@ async function runAll(){
   UI.log(`=== SEQUENCE COMPLETE — ${FWT.results.overall} ===`,anyFail?'err':'ok');
   if(window.W1AGENT&&W1AGENT.present){FWT.results._saved=true;
     W1AGENT.saveRun(FWT.results).then(r=>{
-    if(r&&r.ok){toast(`🗄 Run archived to agent records — #${r.id}`,'good');
-      UI.log(`Witness-test run archived — agent record #${r.id}`,'acc');}});}
+    if(r&&r.ok){FWT.results.agentRecordId=r.id;FWT.results.digest=r.digest;   // v0.8.3 P1/P2
+      toast(`🗄 Run archived to agent records — #${r.id}`,'good');
+      UI.log(`Witness-test run archived — agent record #${r.id}${r.digest?' · SHA-256 '+r.digest.slice(0,16)+'…':''}`,'acc');}});}
   FWT.running=false;
 }
 function buildPunch(fails){

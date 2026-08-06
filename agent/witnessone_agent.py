@@ -30,7 +30,7 @@ Stdlib only — copy this file (plus templates/) to any laptop and run:
   python3 witnessone_agent.py [--port 5710] [--topserver https://127.0.0.1:57418]
                               [--iot URL] [--remote https://registry.example/api]
 """
-import json, os, sys, ssl, time, sqlite3, socket, struct, argparse, threading, datetime, shutil, subprocess
+import json, os, sys, ssl, time, sqlite3, socket, struct, argparse, threading, datetime, shutil, subprocess, hashlib
 import urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -212,7 +212,20 @@ def db():
     c.execute("""CREATE TABLE IF NOT EXISTS runs(
         id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, device TEXT, overall TEXT,
         data_source TEXT, payload TEXT)""")
+    # v0.8.3 P2: tamper-evidence digest. Migration-safe — add the column only if
+    # an older DB predates it, so existing records keep working.
+    cols = {r[1] for r in c.execute("PRAGMA table_info(runs)").fetchall()}
+    if "digest" not in cols:
+        c.execute("ALTER TABLE runs ADD COLUMN digest TEXT")
     return c
+
+def run_digest(payload):
+    """SHA-256 over the canonical JSON of a run payload, with any existing
+    'digest' field excluded from its own input so the value is reproducible.
+    Canonical = sorted keys, compact separators, UTF-8."""
+    src = {k: v for k, v in payload.items() if k != "digest"} if isinstance(payload, dict) else payload
+    canon = json.dumps(src, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canon.encode("utf-8")).hexdigest()
 
 # ---------------- Modbus TCP client (raw sockets) ----------------
 class ModbusException(IOError):
@@ -650,6 +663,24 @@ class H(BaseHTTPRequestHandler):
         if u.path == "/records/runs":
             c = db(); rows = c.execute("SELECT id,ts,device,overall,data_source FROM runs ORDER BY id DESC LIMIT 100").fetchall(); c.close()
             return self._json(200, {"runs": [dict(zip(("id", "ts", "device", "overall", "dataSource"), r)) for r in rows]})
+        if u.path.startswith("/records/verify/"):
+            rid = u.path.rsplit("/", 1)[-1]
+            c = db(); row = c.execute("SELECT payload,digest FROM runs WHERE id=?", (rid,)).fetchone(); c.close()
+            if not row:
+                return self._json(404, {"error": "not found"})
+            stored_digest = row[1]
+            recomputed = run_digest(json.loads(row[0]))
+            # Intact iff the payload still hashes to the digest recorded at archive
+            # time. An optional ?digest= lets a holder of a downloaded certificate
+            # check its printed digest against the authoritative record.
+            external = parse_qs(u.query).get("digest", [None])[0]
+            out = {"id": int(rid), "digest": recomputed,
+                   "storedDigest": stored_digest,
+                   "match": (stored_digest == recomputed)}
+            if external is not None:
+                out["externalDigest"] = external
+                out["externalMatch"] = (external == recomputed)
+            return self._json(200, out)
         if u.path.startswith("/records/runs/"):
             rid = u.path.rsplit("/", 1)[-1]
             c = db(); row = c.execute("SELECT payload FROM runs WHERE id=?", (rid,)).fetchone(); c.close()
@@ -760,13 +791,14 @@ class H(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._json(502, {"ok": False, "error": str(e)})
         if u.path == "/records/runs":
+            digest = run_digest(body or {})
             c = db()
-            cur = c.execute("INSERT INTO runs(ts,device,overall,data_source,payload) VALUES(?,?,?,?,?)",
+            cur = c.execute("INSERT INTO runs(ts,device,overall,data_source,payload,digest) VALUES(?,?,?,?,?,?)",
                 (body.get("finishedAt") or datetime.datetime.now().isoformat(),
                  f"{(body.get('meta') or {}).get('Make','?')} {(body.get('meta') or {}).get('Model','?')[:24]}",
-                 body.get("overall", "?"), body.get("dataSource", "?"), json.dumps(body)))
+                 body.get("overall", "?"), body.get("dataSource", "?"), json.dumps(body), digest))
             c.commit(); rid = cur.lastrowid; c.close()
-            return self._json(201, {"ok": True, "id": rid})
+            return self._json(201, {"ok": True, "id": rid, "digest": digest})
         if u.path == "/registry/sync":
             r = remote_call("GET", "/devices")
             if r is None: return self._json(200, {"ok": False, "msg": "no --remote registry configured; local templates remain authoritative"})
