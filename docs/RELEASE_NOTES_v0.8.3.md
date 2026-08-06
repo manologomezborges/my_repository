@@ -1,14 +1,49 @@
-# WitnessONE v0.8.3 — Release Notes
+# WitnessONE v0.8.3 "Provenance Seal" — Release Notes
 
-Audience: engineers operating, reviewing, or extending WitnessONE. This
-release is a hardening pass on top of the v0.8.2 baseline (`4029efa`),
-covering commits `ee91d2f` .. `4f26c2d` on this branch. It is the direct
-output of a three-round multi-agent security/correctness review: Round 1
-read the baseline and confirmed 37 defects; this release lands fixes for
-roughly 32 of them, plus two same-day regression fixes for defects the
-review's own fixes introduced. Full defect-by-defect narrative and root
-causes: `docs/OPS_POSTMORTEM.md`. Day-to-day operating instructions for
-everything below: `docs/RUNBOOK.md`.
+Audience: engineers operating, reviewing, or extending WitnessONE.
+
+**Version story (read first).** This branch reached v0.8.3 in two stages:
+
+1. A **hardening pass** on the v0.8.2 baseline (`4029efa`), commits
+   `ee91d2f` .. `4f26c2d` — a three-round multi-agent security/correctness
+   review that confirmed 37 defects and landed fixes for ~32, plus two
+   same-day regression fixes. This stabilized v0.8.2; it is *not* a feature
+   release of its own.
+2. The **v0.8.3 "Provenance Seal"** feature release (`ba78b37`) — the P0/P1/P2
+   work that makes the tool structurally incapable of issuing a passing
+   certificate from unverified data. This is what the version number names.
+
+Both are documented below: the Provenance Seal first (the release proper),
+then the hardening fixes it was built on. Full defect-by-defect narrative and
+root causes: `docs/OPS_POSTMORTEM.md`. Operating instructions: `docs/RUNBOOK.md`.
+
+## Provenance Seal (the v0.8.3 release proper)
+
+Before this release a **simulated** session could still print a `RED TAG ✔
+PASS` certificate — labeling was honest but issuance was not gated. v0.8.3
+closes that at issuance:
+
+- **P0 — Issuance gate.** A certificate whose point-to-point values were not
+  read LIVE renders as a marked **DEMONSTRATION**: diagonal "SIMULATION DEMO —
+  NOT A CERTIFICATE" watermark, no RED TAG, `(DEMONSTRATION)` title, verdict
+  prefixed `DEMO —`, and a section-2 comms row of "N/A — no live session". Over
+  a dead live link, point-to-point is blocked from starting and stale points
+  read BAD → FAIL (the twin still shows last values under the LINK LOST banner:
+  display honesty vs certification honesty).
+- **P1 — Provenance record.** A session id (`W1S-…`) and preflight record are
+  minted on preflight pass; each live value carries its read timestamp and
+  Modbus function code; the certificate gains a "Read at" column, Session ID /
+  Agent record rows, and archives the run before rendering.
+- **P2 — Tamper-evidence.** `POST /records/runs` stores a SHA-256 over the
+  canonical run payload and returns it; `GET /records/verify/<id>` recomputes
+  and reports `match`; the certificate footer prints the digest and record id.
+
+Acceptance: `qa/qa11_provenance.py` covers all four cases (sim gate, live
+provenance, staleness, tamper) and passes headless alongside the 10 prior
+suites. P3 (FC43 device-identity binding) and P4 (witnessed-event issuance
+enforcement) remain deferred by decision.
+
+## Hardening pass (v0.8.2 stabilization this was built on)
 
 No prior version of this branch was released or depended on for a live
 commissioning, so nothing here is a "regression" against a shipped product

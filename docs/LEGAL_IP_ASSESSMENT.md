@@ -34,9 +34,14 @@ cryptographically signed**. The signature and approval blocks are
 `contenteditable` HTML fields that a witness types into, followed by a browser
 `window.print()` (`src/app/09_report.js`, `paperHTML()` and `REPORT.init()`
 around lines 89, 121-128, 172). There is no digital signature, no hash chain, no
-key material, and no tamper-evidence on the produced document. This is worth
-stating because "cryptographically signed commissioning certificate" would be a
-different and stronger IP story than the one the code actually supports. The
+key material. As of v0.8.3 there **is** hash-based tamper-evidence — the agent
+stores a SHA-256 over the canonical run payload and exposes `GET
+/records/verify/<id>` to recompute and compare it, and the certificate prints
+that digest — but this is integrity verification against the agent's own
+archived record, **not** a PKI digital signature (no keys, no chain of trust to
+an external authority). This distinction is worth stating because
+"cryptographically signed commissioning certificate" would still be a different
+and stronger IP story than the one the code actually supports. The
 integrity work that *does* exist is about **not fabricating PASS/quality data on
 the certificate** (see §5), which is a correctness property, not a signing
 property.
@@ -445,8 +450,11 @@ the connective tissue of the product. No patent theory recommended on its own.
    the cheap, effective move for A, C, and E is to publish enough to keep
    competitors from patenting around WitnessONE.
 3. **Do not market the certificate as "signed" without adding real signing.**
-   (§0.) If cryptographic signing / tamper-evidence is added later, revisit —
-   that could become a stronger, separately assessable IP item.
+   (§0.) v0.8.3 added hash-based **tamper-evidence** (SHA-256 digest +
+   `/records/verify`), which is a step up but is not a PKI digital signature —
+   so "signed" is still the wrong word. If true cryptographic signing (keys,
+   chain of trust) is added later, revisit — that, and the digest/verify
+   mechanism now shipped, could become stronger, separately assessable IP items.
 4. **Confirm ownership/assignment of the "MG" authored code** before any
    filing or publication. *(TODO: ownership and any Equinix/employer assignment
    terms are not determinable from the repository; confirm with counsel.)*
