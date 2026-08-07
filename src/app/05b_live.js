@@ -16,9 +16,13 @@ const LIVE=window.LIVE={
 
 /* ---------------- HTTP core ---------------- */
 function join(base,path){return base.replace(/\/+$/,'')+path;}
-/* v0.8.3 P1: Modbus function code implied by an SPL address prefix (matches the
-   agent's addr_split): 1xxxx→FC02 discrete, 3xxxx→FC04 input, 4xxxx→FC03 holding. */
-LIVE.fcForAddr=function(a){const s=String(a==null?'':a);return s[0]==='1'?2:(s[0]==='4'?3:4);};
+/* v0.8.3 P1: Modbus function code implied by an SPL address, mirroring the
+   agent's addr_split thresholds exactly (5- and 6-digit maps, incl. coils):
+   4xxxxx/4xxxx→FC03 holding · 3xxxxx/3xxxx→FC04 input · 1xxxxx/1xxxx→FC02
+   discrete · below 10001→FC01 coil. */
+LIVE.fcForAddr=function(a){const n=parseInt(a,10);if(!isFinite(n))return 4;
+  if(n>=400001)return 3; if(n>=300001)return 4; if(n>=100001)return 2;
+  if(n>=40001)return 3;  if(n>=30001)return 4;  if(n>=10001)return 2;  return 1;};
 /* v0.8.3 P1: bind a provenance session to the preflight evidence that just passed.
    sessionId + preflight are stamped on the certificate; staleMs is the freshness
    window a live per-point read must beat to count as GOOD on the certificate. */

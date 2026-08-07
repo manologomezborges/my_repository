@@ -216,7 +216,10 @@ def db():
     # an older DB predates it, so existing records keep working.
     cols = {r[1] for r in c.execute("PRAGMA table_info(runs)").fetchall()}
     if "digest" not in cols:
-        c.execute("ALTER TABLE runs ADD COLUMN digest TEXT")
+        try:
+            c.execute("ALTER TABLE runs ADD COLUMN digest TEXT")
+        except sqlite3.OperationalError:
+            pass  # another thread's first request added it in the same window
     return c
 
 def run_digest(payload):
@@ -259,7 +262,9 @@ class Modbus:
         if tid != req_tid or proto != 0 or unit != self.unit:
             raise IOError(f"MBAP mismatch: got tid={tid} proto={proto} unit={unit}, "
                           f"expected tid={req_tid} proto=0 unit={self.unit}")
-        if ln < 2:
+        if ln < 3:
+            # a valid response PDU is >= 2 bytes (function code + at least one
+            # data/exception byte); ln counts the unit byte too, so ln>=3.
             raise IOError(f"MBAP length too short: {ln}")
         body = self._recvn(ln - 1)
         if body[0] & 0x80:
@@ -460,16 +465,17 @@ def scan_registers(ip, port, unit, ranges, chunk=12, delay=0.04):
                     vals = rd(m, fc, off, n)
                     for i, v in enumerate(vals):
                         found.append({"fc": fc, "addr": base + off + i, "value": int(v)})
-                except IOError as e:
-                    if "exception" not in str(e): raise      # socket-level: bubble to reconnect
-                    refused += 1                              # illegal address → probe singles
+                except ModbusException:                      # protocol exception (illegal address)
+                    refused += 1                              # → probe the range one register at a time
                     for kk in range(n):
                         try:
                             v = rd(m, fc, off + kk, 1)[0]
                             found.append({"fc": fc, "addr": base + off + kk, "value": int(v)})
-                        except IOError as e2:
-                            if "exception" not in str(e2): raise
+                        except ModbusException:
+                            pass                             # single also illegal → skip it
                         time.sleep(delay)
+                # a plain IOError (socket/transport fault, incl. MBAP mismatch) is
+                # NOT caught here → it bubbles to with_device, which reconnects.
                 off += n
                 time.sleep(delay)
         return True

@@ -45,8 +45,8 @@ canvas#gl{position:fixed;inset:0;z-index:0;display:block}
 
 /* ================= GENERIC UI ================= */
 .btn{display:inline-flex;align-items:center;gap:8px;justify-content:center;border:none;cursor:pointer;
-  font:600 13px var(--sans);letter-spacing:.4px;color:#fff;padding:10px 18px;border-radius:10px;
-  background:linear-gradient(180deg,#ff8a2a,#ea630c);box-shadow:0 2px 14px var(--accg),inset 0 1px 0 rgba(255,255,255,.25);
+  font:700 14px var(--sans);letter-spacing:.4px;color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.4);padding:10px 18px;border-radius:10px;
+  background:linear-gradient(180deg,#e2620d,#b83c0a);box-shadow:0 2px 14px var(--accg),inset 0 1px 0 rgba(255,255,255,.22);
   transition:transform .12s,box-shadow .2s,filter .2s}
 .btn:hover{transform:translateY(-1px);box-shadow:0 4px 22px var(--accg)}
 .btn:active{transform:translateY(0) scale(.98)}
@@ -192,18 +192,27 @@ input[type=password]:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(249
 #main{flex:1;display:flex;gap:14px;padding:10px 16px 8px;min-height:0}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);backdrop-filter:blur(12px);
   box-shadow:0 14px 40px rgba(0,0,0,.4);display:flex;flex-direction:column;min-height:0}
-#left{width:384px;flex:0 0 384px}
-#right{width:440px;flex:0 0 440px}
-#center{flex:1;position:relative;pointer-events:none;min-width:220px}
+/* data panels flex up to absorb reclaimed width; the 3D center is capped so it no
+   longer dominates (F1.1) */
+#left{flex:1 1 384px;min-width:340px;max-width:480px}
+#right{flex:1 1 440px;min-width:380px;max-width:560px}
+#center{flex:1 1 300px;position:relative;pointer-events:none;min-width:220px;max-width:560px}
 /* expand/restore control on data panels — give trends/points/bench more room, less 3D */
 .pbtn{pointer-events:auto;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--txt2);
-  border-radius:7px;font:600 12px var(--mono);line-height:1;padding:4px 8px;cursor:pointer;transition:border .15s,color .15s}
+  border-radius:7px;font:600 13px var(--mono);line-height:1;min-width:32px;min-height:32px;padding:0 8px;cursor:pointer;transition:border .15s,color .15s}
+/* reduced-motion: stop looping/decorative animation, keep alarms legible as a static border (F5.3) */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+  .tile.alarmed{animation:none;border-color:rgba(248,113,113,.85)}
+}
 .pbtn:hover{border-color:var(--acc2);color:var(--txt)}
-.panel.max{position:fixed;inset:66px 16px 12px;width:auto!important;flex:none;z-index:40;max-width:none}
-.panel.max #tiles{max-height:none}
-.panel.max #trendWrap{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
-.panel.max #trendChart{height:min(48vh,460px)}
+.panel.max{position:fixed;inset:66px 16px 12px;width:auto!important;flex:none;z-index:40;max-width:none!important;min-width:0!important}
+/* maximized panels REFLOW to use the width, not just stretch (F3.1) */
+.panel.max #tiles{max-height:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:8px;align-content:start}
+.panel.max #trendWrap{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;grid-column:1/-1}
+.panel.max #trendChart{height:min(46vh,440px)}
 .panel.max #ptTableWrap{flex:1 1 auto}
+.panel.max .pts td,.panel.max .pts th{padding-top:9px;padding-bottom:9px}
 #bench.max{width:min(760px,92vw);top:66px;bottom:12px;max-height:none;overflow:auto;transform:none}
 .ptitle{font:700 10.5px var(--sans);letter-spacing:1.6px;color:var(--txt3);text-transform:uppercase;
   padding:13px 16px 9px;display:flex;align-items:center;justify-content:space-between;flex:0 0 auto}
@@ -389,7 +398,7 @@ table.pts tr.isalarm td.v{color:var(--crit)}
   #printHost .paper table{page-break-inside:auto}
 }
 #printHost{display:none}
-@media (max-width:1280px){#right{width:372px;flex-basis:372px}#left{width:328px;flex-basis:328px}}
+@media (max-width:1280px){#left{flex-basis:320px;min-width:300px}#right{flex-basis:360px;min-width:330px}}
 </style>
 </head>
 <body>
@@ -1266,9 +1275,13 @@ const LIVE=window.LIVE={
 
 /* ---------------- HTTP core ---------------- */
 function join(base,path){return base.replace(/\/+$/,'')+path;}
-/* v0.8.3 P1: Modbus function code implied by an SPL address prefix (matches the
-   agent's addr_split): 1xxxx→FC02 discrete, 3xxxx→FC04 input, 4xxxx→FC03 holding. */
-LIVE.fcForAddr=function(a){const s=String(a==null?'':a);return s[0]==='1'?2:(s[0]==='4'?3:4);};
+/* v0.8.3 P1: Modbus function code implied by an SPL address, mirroring the
+   agent's addr_split thresholds exactly (5- and 6-digit maps, incl. coils):
+   4xxxxx/4xxxx→FC03 holding · 3xxxxx/3xxxx→FC04 input · 1xxxxx/1xxxx→FC02
+   discrete · below 10001→FC01 coil. */
+LIVE.fcForAddr=function(a){const n=parseInt(a,10);if(!isFinite(n))return 4;
+  if(n>=400001)return 3; if(n>=300001)return 4; if(n>=100001)return 2;
+  if(n>=40001)return 3;  if(n>=30001)return 4;  if(n>=10001)return 2;  return 1;};
 /* v0.8.3 P1: bind a provenance session to the preflight evidence that just passed.
    sessionId + preflight are stamped on the certificate; staleMs is the freshness
    window a live per-point read must beat to count as GOOD on the certificate. */
@@ -3372,6 +3385,21 @@ FWT.open=function(){$('testdeck').classList.remove('hidden');
     if(chips[2])chips[2].textContent=T.registry.splVersion+' · '+DB.points.length+' POINTS';}}
   buildDeck();buildWDeck();$('tdBodyW').dataset.built=1;};
 
+/* Archive a specific results object exactly once, stamping its record id + digest
+   onto THAT object (never the global FWT.results, which a later run may have
+   replaced). Memoized per-object; a failed save clears the memo so a later
+   REPORT.open can retry once the agent is back. */
+FWT.ensureArchived=function(R){
+  if(!R||!(window.W1AGENT&&W1AGENT.present))return Promise.resolve(null);
+  if(R._savePromise)return R._savePromise;
+  R._savePromise=W1AGENT.saveRun(R).then(r=>{
+    if(r&&r.ok){R.agentRecordId=r.id;R.digest=r.digest;R._saved=true;}
+    else R._savePromise=null;   // let a later open retry
+    return r;
+  }).catch(()=>{R._savePromise=null;return null;});
+  return R._savePromise;
+};
+
 async function runAll(){
   if(FWT.running)return;FWT.running=true;abortFlag=false;
   $('btnTdRun').disabled=true;$('btnTdAbort').disabled=false;$('btnTdReport').disabled=true;
@@ -3383,7 +3411,7 @@ async function runAll(){
   FWT.results={startedAt:new Date().toISOString(),cfg:{...SIM.cfg},meta:DB.meta,steps:[],p2p:[],punch:[],
     assetClass:_T.class,assetTag:_tag,scriptId:_T.fwtScript||'FWT-01-R1',
     splVersion:_T.registry.splVersion,revId:_T.registry.revId,revStatus:_T.registry.revStatus||'approved',
-    sessionId:(window.LIVE&&LIVE.sessionId)||null,preflight:(window.LIVE&&LIVE.preflight)||null,pollMs:SIM.pollMs,  // v0.8.3 P1
+    sessionId:(window.LIVE&&LIVE.sessionId)||null,preflight:(window.LIVE&&LIVE.preflight)||null,pollMs:oldPoll,  // v0.8.3 P1 — operational poll rate, not the accelerated deck cadence
     dataSource:(window.LIVE&&LIVE.valuesLive&&LIVE.source==='agent')?`LIVE — Direct Modbus via WitnessONE Agent · ${SIM.cfg.ip}:${SIM.cfg.port}.${SIM.cfg.unit}${LIVE.configOk?' · TOP Server config verified':''}`
       :(window.LIVE&&LIVE.valuesLive)?`LIVE — ${(LIVE.st.about||{}).product_name||'TOP Server'} ${(LIVE.st.about||{}).product_version||''} · Config API + live gateway · ${LIVE.target.ch}.${LIVE.target.dev}`
       :(window.LIVE&&LIVE.enabled)?`HYBRID — configuration LIVE on ${(LIVE.st.about||{}).product_name||'TOP Server'} (${LIVE.target.ch}.${LIVE.target.dev} provisioned via /config/v1) · values simulated`
@@ -3421,11 +3449,9 @@ async function runAll(){
   $('btnReport').disabled=false;
   toast(anyFail?'⚠ Witness test complete — FAILURES recorded':'✅ Witness test complete — certificate ready','good',4200);
   UI.log(`=== SEQUENCE COMPLETE — ${FWT.results.overall} ===`,anyFail?'err':'ok');
-  if(window.W1AGENT&&W1AGENT.present){FWT.results._saved=true;
-    W1AGENT.saveRun(FWT.results).then(r=>{
-    if(r&&r.ok){FWT.results.agentRecordId=r.id;FWT.results.digest=r.digest;   // v0.8.3 P1/P2
-      toast(`🗄 Run archived to agent records — #${r.id}`,'good');
-      UI.log(`Witness-test run archived — agent record #${r.id}${r.digest?' · SHA-256 '+r.digest.slice(0,16)+'…':''}`,'acc');}});}
+  FWT.ensureArchived(FWT.results).then(r=>{
+    if(r&&r.ok){toast(`🗄 Run archived to agent records — #${r.id}`,'good');
+      UI.log(`Witness-test run archived — agent record #${r.id}${r.digest?' · SHA-256 '+r.digest.slice(0,16)+'…':''}`,'acc');}});
   FWT.running=false;
 }
 function buildPunch(fails){
@@ -3654,10 +3680,8 @@ REPORT.open=async function(){
      render — it prints "not archived (agent offline)" instead (the read data is
      no less real, only un-filed). */
   if(window.W1AGENT&&W1AGENT.present&&!FWT.results._saved){
-    FWT.results._saved=true;
-    try{const r=await W1AGENT.saveRun(FWT.results);
-      if(r&&r.ok){FWT.results.agentRecordId=r.id;FWT.results.digest=r.digest;
-        UI.log(`Run archived — agent record #${r.id}${r.digest?' · SHA-256 '+r.digest.slice(0,16)+'…':''}`,'acc');}
+    try{const r=await FWT.ensureArchived(FWT.results);
+      if(r&&r.ok)UI.log(`Run archived — agent record #${r.id}${r.digest?' · SHA-256 '+r.digest.slice(0,16)+'…':''}`,'acc');
     }catch(e){}
   }
   $('reportScroll').innerHTML=paperHTML(FWT.results);

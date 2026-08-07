@@ -189,10 +189,8 @@ REPORT.open=async function(){
      render — it prints "not archived (agent offline)" instead (the read data is
      no less real, only un-filed). */
   if(window.W1AGENT&&W1AGENT.present&&!FWT.results._saved){
-    FWT.results._saved=true;
-    try{const r=await W1AGENT.saveRun(FWT.results);
-      if(r&&r.ok){FWT.results.agentRecordId=r.id;FWT.results.digest=r.digest;
-        UI.log(`Run archived — agent record #${r.id}${r.digest?' · SHA-256 '+r.digest.slice(0,16)+'…':''}`,'acc');}
+    try{const r=await FWT.ensureArchived(FWT.results);
+      if(r&&r.ok)UI.log(`Run archived — agent record #${r.id}${r.digest?' · SHA-256 '+r.digest.slice(0,16)+'…':''}`,'acc');
     }catch(e){}
   }
   $('reportScroll').innerHTML=paperHTML(FWT.results);

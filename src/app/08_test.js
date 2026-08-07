@@ -510,6 +510,21 @@ FWT.open=function(){$('testdeck').classList.remove('hidden');
     if(chips[2])chips[2].textContent=T.registry.splVersion+' · '+DB.points.length+' POINTS';}}
   buildDeck();buildWDeck();$('tdBodyW').dataset.built=1;};
 
+/* Archive a specific results object exactly once, stamping its record id + digest
+   onto THAT object (never the global FWT.results, which a later run may have
+   replaced). Memoized per-object; a failed save clears the memo so a later
+   REPORT.open can retry once the agent is back. */
+FWT.ensureArchived=function(R){
+  if(!R||!(window.W1AGENT&&W1AGENT.present))return Promise.resolve(null);
+  if(R._savePromise)return R._savePromise;
+  R._savePromise=W1AGENT.saveRun(R).then(r=>{
+    if(r&&r.ok){R.agentRecordId=r.id;R.digest=r.digest;R._saved=true;}
+    else R._savePromise=null;   // let a later open retry
+    return r;
+  }).catch(()=>{R._savePromise=null;return null;});
+  return R._savePromise;
+};
+
 async function runAll(){
   if(FWT.running)return;FWT.running=true;abortFlag=false;
   $('btnTdRun').disabled=true;$('btnTdAbort').disabled=false;$('btnTdReport').disabled=true;
@@ -521,7 +536,7 @@ async function runAll(){
   FWT.results={startedAt:new Date().toISOString(),cfg:{...SIM.cfg},meta:DB.meta,steps:[],p2p:[],punch:[],
     assetClass:_T.class,assetTag:_tag,scriptId:_T.fwtScript||'FWT-01-R1',
     splVersion:_T.registry.splVersion,revId:_T.registry.revId,revStatus:_T.registry.revStatus||'approved',
-    sessionId:(window.LIVE&&LIVE.sessionId)||null,preflight:(window.LIVE&&LIVE.preflight)||null,pollMs:SIM.pollMs,  // v0.8.3 P1
+    sessionId:(window.LIVE&&LIVE.sessionId)||null,preflight:(window.LIVE&&LIVE.preflight)||null,pollMs:oldPoll,  // v0.8.3 P1 — operational poll rate, not the accelerated deck cadence
     dataSource:(window.LIVE&&LIVE.valuesLive&&LIVE.source==='agent')?`LIVE — Direct Modbus via WitnessONE Agent · ${SIM.cfg.ip}:${SIM.cfg.port}.${SIM.cfg.unit}${LIVE.configOk?' · TOP Server config verified':''}`
       :(window.LIVE&&LIVE.valuesLive)?`LIVE — ${(LIVE.st.about||{}).product_name||'TOP Server'} ${(LIVE.st.about||{}).product_version||''} · Config API + live gateway · ${LIVE.target.ch}.${LIVE.target.dev}`
       :(window.LIVE&&LIVE.enabled)?`HYBRID — configuration LIVE on ${(LIVE.st.about||{}).product_name||'TOP Server'} (${LIVE.target.ch}.${LIVE.target.dev} provisioned via /config/v1) · values simulated`
@@ -559,11 +574,9 @@ async function runAll(){
   $('btnReport').disabled=false;
   toast(anyFail?'⚠ Witness test complete — FAILURES recorded':'✅ Witness test complete — certificate ready','good',4200);
   UI.log(`=== SEQUENCE COMPLETE — ${FWT.results.overall} ===`,anyFail?'err':'ok');
-  if(window.W1AGENT&&W1AGENT.present){FWT.results._saved=true;
-    W1AGENT.saveRun(FWT.results).then(r=>{
-    if(r&&r.ok){FWT.results.agentRecordId=r.id;FWT.results.digest=r.digest;   // v0.8.3 P1/P2
-      toast(`🗄 Run archived to agent records — #${r.id}`,'good');
-      UI.log(`Witness-test run archived — agent record #${r.id}${r.digest?' · SHA-256 '+r.digest.slice(0,16)+'…':''}`,'acc');}});}
+  FWT.ensureArchived(FWT.results).then(r=>{
+    if(r&&r.ok){toast(`🗄 Run archived to agent records — #${r.id}`,'good');
+      UI.log(`Witness-test run archived — agent record #${r.id}${r.digest?' · SHA-256 '+r.digest.slice(0,16)+'…':''}`,'acc');}});
   FWT.running=false;
 }
 function buildPunch(fails){
