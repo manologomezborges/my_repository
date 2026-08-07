@@ -245,11 +245,22 @@ class Modbus:
         except Exception: pass
     def _rt(self, fc, payload):
         self.tid = (self.tid + 1) & 0xFFFF
+        req_tid = self.tid
         pdu = struct.pack(">B", fc) + payload
-        adu = struct.pack(">HHHB", self.tid, 0, len(pdu) + 1, self.unit) + pdu
+        adu = struct.pack(">HHHB", req_tid, 0, len(pdu) + 1, self.unit) + pdu
         self.sock.sendall(adu)
         hdr = self._recvn(7)
         (tid, proto, ln, unit) = struct.unpack(">HHHB", hdr)
+        # Reject a frame that isn't the answer to THIS request: a stale/late reply
+        # left on the reused socket (e.g. after a prior timeout), a non-zero MBAP
+        # protocol id, or a wrong unit echo. Mis-attributing another block's answer
+        # to this one would put a wrong value on a signed certificate, so treat a
+        # mismatch as a transport fault → the caller reconnects on a clean socket.
+        if tid != req_tid or proto != 0 or unit != self.unit:
+            raise IOError(f"MBAP mismatch: got tid={tid} proto={proto} unit={unit}, "
+                          f"expected tid={req_tid} proto=0 unit={self.unit}")
+        if ln < 2:
+            raise IOError(f"MBAP length too short: {ln}")
         body = self._recvn(ln - 1)
         if body[0] & 0x80:
             raise ModbusException(f"Modbus exception fc={fc} code={body[1]}")
