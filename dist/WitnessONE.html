@@ -192,9 +192,19 @@ input[type=password]:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(249
 #main{flex:1;display:flex;gap:14px;padding:10px 16px 8px;min-height:0}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);backdrop-filter:blur(12px);
   box-shadow:0 14px 40px rgba(0,0,0,.4);display:flex;flex-direction:column;min-height:0}
-#left{width:330px;flex:0 0 330px}
-#right{width:392px;flex:0 0 392px}
-#center{flex:1;position:relative;pointer-events:none}
+#left{width:384px;flex:0 0 384px}
+#right{width:440px;flex:0 0 440px}
+#center{flex:1;position:relative;pointer-events:none;min-width:220px}
+/* expand/restore control on data panels — give trends/points/bench more room, less 3D */
+.pbtn{pointer-events:auto;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--txt2);
+  border-radius:7px;font:600 12px var(--mono);line-height:1;padding:4px 8px;cursor:pointer;transition:border .15s,color .15s}
+.pbtn:hover{border-color:var(--acc2);color:var(--txt)}
+.panel.max{position:fixed;inset:66px 16px 12px;width:auto!important;flex:none;z-index:40;max-width:none}
+.panel.max #tiles{max-height:none}
+.panel.max #trendWrap{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
+.panel.max #trendChart{height:min(48vh,460px)}
+.panel.max #ptTableWrap{flex:1 1 auto}
+#bench.max{width:min(760px,92vw);top:66px;bottom:12px;max-height:none;overflow:auto;transform:none}
 .ptitle{font:700 10.5px var(--sans);letter-spacing:1.6px;color:var(--txt3);text-transform:uppercase;
   padding:13px 16px 9px;display:flex;align-items:center;justify-content:space-between;flex:0 0 auto}
 .ptitle .btn{pointer-events:auto}
@@ -215,7 +225,7 @@ input[type=password]:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(249
 .tgroup::after{content:"";flex:1;height:1px;background:var(--line)}
 .tgroup .sw{width:8px;height:8px;border-radius:2px}
 #trendWrap{flex:0 0 auto;padding:4px 12px 12px}
-#trendChart{width:100%;height:118px;border-radius:10px;background:rgba(0,0,0,.25)}
+#trendChart{width:100%;height:170px;border-radius:10px;background:rgba(0,0,0,.25)}
 #trendLegend{display:flex;gap:12px;padding:7px 4px 0;font:600 10px var(--sans);letter-spacing:.6px;color:var(--txt2)}
 #trendLegend .li{display:flex;gap:5px;align-items:center}
 #trendLegend .sw{width:9px;height:3px;border-radius:2px}
@@ -379,7 +389,7 @@ table.pts tr.isalarm td.v{color:var(--crit)}
   #printHost .paper table{page-break-inside:auto}
 }
 #printHost{display:none}
-@media (max-width:1280px){#right{width:330px;flex-basis:330px}#left{width:290px;flex-basis:290px}}
+@media (max-width:1280px){#right{width:372px;flex-basis:372px}#left{width:328px;flex-basis:328px}}
 </style>
 </head>
 <body>
@@ -520,7 +530,7 @@ table.pts tr.isalarm td.v{color:var(--crit)}
 
   <div id="main">
     <div class="panel" id="left">
-      <div class="ptitle"><span>Live Telemetry — SPL 1.0</span><span class="chip" id="pollChip"><span class="dot ok"></span><span id="pollTxt">POLL 1 s</span></span></div>
+      <div class="ptitle"><span>Live Telemetry — SPL 1.0</span><span style="display:flex;gap:7px;align-items:center"><button class="pbtn" data-max="left" title="Expand">⤢</button><span class="chip" id="pollChip"><span class="dot ok"></span><span id="pollTxt">POLL 1 s</span></span></span></div>
       <div id="tiles"></div>
       <div id="trendWrap">
         <div class="ptitle" style="padding:6px 4px 6px"><span>Supply / Return / Setpoint — °C</span></div>
@@ -544,7 +554,7 @@ table.pts tr.isalarm td.v{color:var(--crit)}
 
     <div class="panel" id="right">
       <div class="ptitle"><span>Modbus Points — <span id="ptCount">26</span> · <span id="rxChip" class="chip ok" style="font-size:9px;padding:2px 8px;margin-left:4px">RX —</span></span>
-        <span style="display:flex;gap:7px;align-items:center"><button class="btn ghost small" id="btnAddReg" style="padding:3px 9px;font-size:10px">＋ REG</button><span class="badge ok">SPL 1.0</span></span></div>
+        <span style="display:flex;gap:7px;align-items:center"><button class="pbtn" data-max="right" title="Expand">⤢</button><button class="btn ghost small" id="btnAddReg" style="padding:3px 9px;font-size:10px">＋ REG</button><span class="badge ok">SPL 1.0</span></span></div>
       <div id="ptSearchWrap"><input type="text" id="ptSearch" placeholder="Filter points… (name, address, alarm)" spellcheck="false"></div>
       <div id="ptTableWrap"><table class="pts"><thead><tr>
         <th>Point</th><th>Addr</th><th style="text-align:right">Value</th>
@@ -566,7 +576,7 @@ table.pts tr.isalarm td.v{color:var(--crit)}
        #menuPanel to 10 relative to the root, so #bench (z-index:14, a root-level sibling)
        painted over the whole menu while the drawer was open. -->
   <div id="bench">
-    <h3>Test Bench — Scenario Injection</h3>
+    <h3 style="display:flex;justify-content:space-between;align-items:center;gap:10px">Test Bench — Scenario Injection <button class="pbtn" data-max="bench" title="Expand">⤢</button></h3>
     <div class="row"><div class="rlab"><span>IT Heat Load</span><b class="num" id="loadVal">620 kW</b></div>
       <input type="range" id="loadSlider" min="0" max="1350" value="620"></div>
     <div class="row"><div class="rlab"><span>Secondary Setpoint (40001 · RW)</span><b class="num" id="spVal">32.0 °C</b></div>
@@ -2829,6 +2839,19 @@ UI.init=function(){
   const tc=$('trendChart');
   tc.addEventListener('pointermove',e=>{const r=tc.getBoundingClientRect();trendHover=e.clientX-r.left;});
   tc.addEventListener('pointerleave',()=>trendHover=null);
+  // Expandable data panels: one panel at a time pops to a large overlay so the
+  // trend / points table / test bench get real room and the 3D window shrinks.
+  const syncMaxBtns=()=>document.querySelectorAll('.pbtn[data-max]').forEach(x=>{
+    const t=document.getElementById(x.dataset.max),m=t&&t.classList.contains('max');
+    x.textContent=m?'⤡':'⤢';x.title=m?'Restore':'Expand';});
+  document.querySelectorAll('.pbtn[data-max]').forEach(b=>{
+    b.onclick=()=>{const el=document.getElementById(b.dataset.max);if(!el)return;
+      const open=!el.classList.contains('max');
+      document.querySelectorAll('.panel.max,#bench.max').forEach(p=>p.classList.remove('max'));
+      if(open)el.classList.add('max');
+      syncMaxBtns();try{drawTrend();}catch(e){}};});
+  addEventListener('keydown',e=>{if(e.key==='Escape'){const m=document.querySelector('.panel.max,#bench.max');
+    if(m){m.classList.remove('max');syncMaxBtns();try{drawTrend();}catch(e){}}}});
   SIM.on('tick',s=>{updTiles(s);drawTrend();alarmEdges(s);updLink(s);});
   SIM.on('poll',()=>{updTable();if(!SIM.st.faults.comms)SCENE.pollBurst(46);
     if(window.LIVE&&LIVE.valuesLive&&!LIVE.pauseTwin)LIVE.pollOnce().then(()=>LIVE.applyToTwin());});

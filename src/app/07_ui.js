@@ -349,6 +349,19 @@ UI.init=function(){
   const tc=$('trendChart');
   tc.addEventListener('pointermove',e=>{const r=tc.getBoundingClientRect();trendHover=e.clientX-r.left;});
   tc.addEventListener('pointerleave',()=>trendHover=null);
+  // Expandable data panels: one panel at a time pops to a large overlay so the
+  // trend / points table / test bench get real room and the 3D window shrinks.
+  const syncMaxBtns=()=>document.querySelectorAll('.pbtn[data-max]').forEach(x=>{
+    const t=document.getElementById(x.dataset.max),m=t&&t.classList.contains('max');
+    x.textContent=m?'⤡':'⤢';x.title=m?'Restore':'Expand';});
+  document.querySelectorAll('.pbtn[data-max]').forEach(b=>{
+    b.onclick=()=>{const el=document.getElementById(b.dataset.max);if(!el)return;
+      const open=!el.classList.contains('max');
+      document.querySelectorAll('.panel.max,#bench.max').forEach(p=>p.classList.remove('max'));
+      if(open)el.classList.add('max');
+      syncMaxBtns();try{drawTrend();}catch(e){}};});
+  addEventListener('keydown',e=>{if(e.key==='Escape'){const m=document.querySelector('.panel.max,#bench.max');
+    if(m){m.classList.remove('max');syncMaxBtns();try{drawTrend();}catch(e){}}}});
   SIM.on('tick',s=>{updTiles(s);drawTrend();alarmEdges(s);updLink(s);});
   SIM.on('poll',()=>{updTable();if(!SIM.st.faults.comms)SCENE.pollBurst(46);
     if(window.LIVE&&LIVE.valuesLive&&!LIVE.pauseTwin)LIVE.pollOnce().then(()=>LIVE.applyToTwin());});
