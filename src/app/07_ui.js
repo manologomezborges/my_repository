@@ -295,9 +295,10 @@ function applyReadEdit(id,label){
   recomposeLive(id);                         // re-decode last raw words with the new interpretation
   updTable();
   fillDetail(id);try{drawTrend();}catch(e){}
-  const draft=window.W1_ACTIVE_TEMPLATE&&W1_ACTIVE_TEMPLATE.registry.revStatus==='field-draft';
+  const T=window.W1_ACTIVE_TEMPLATE;
+  const draft=T&&T.registry.revStatus==='field-draft';
   toast(`${label}${draft?' · field-draft (save & propose to persist)':''}`,'good',3000);
-  const dev=window.W1_ACTIVE_TEMPLATE&&W1_ACTIVE_TEMPLATE.id;
+  const dev=T&&T.id;
   if(dev&&window.REGISTRY){REGISTRY.snapshotDraft(dev);
     if(window.W1AGENT&&W1AGENT.present){
       // Save the draft so the agent reads the point with its NEW span (a 32-bit
@@ -311,19 +312,17 @@ function applyReadEdit(id,label){
     }
   }
 }
+function editDraftPoint(id){                   // fork a draft if needed, then resolve the live working-copy point (fork can swap SPL_DB objects)
+  ensureDraftForEdit();return (window.SPL_DB.points||[]).find(x=>x.id===id);
+}
 UI.setReadAs=function(id,fmt){
   const m=RA_MAP[fmt];if(!m)return;
-  ensureDraftForEdit();                       // may fork + rebuild SPL_DB, so resolve the point AFTER
-  const p=(window.SPL_DB.points||[]).find(x=>x.id===id);
-  if(!p||!p.addrs||!p.addrs.length)return;
-  Object.assign(p,m);
-  applyReadEdit(id,`${id} → read as ${fmt}`);
+  const p=editDraftPoint(id);if(!p||!p.addrs||!p.addrs.length)return;
+  Object.assign(p,m);applyReadEdit(id,`${id} → read as ${fmt}`);
 };
 UI.setWordOrder=function(id,order){
-  ensureDraftForEdit();
-  const p=(window.SPL_DB.points||[]).find(x=>x.id===id);if(!p)return;
-  p.wordOrder=order;
-  applyReadEdit(id,`${id} word order → ${order.toUpperCase()}`);
+  const p=editDraftPoint(id);if(!p)return;
+  p.wordOrder=order;applyReadEdit(id,`${id} word order → ${order.toUpperCase()}`);
 };
 
 function fillDetail(id){
