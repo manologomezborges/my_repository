@@ -200,6 +200,17 @@ input[type=password]:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(249
 /* expand/restore control on data panels — give trends/points/bench more room, less 3D */
 .pbtn{pointer-events:auto;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--txt2);
   border-radius:7px;font:600 13px var(--mono);line-height:1;min-width:32px;min-height:32px;padding:0 8px;cursor:pointer;transition:border .15s,color .15s}
+/* trend controls: time-frame segmented buttons, removable legend chips, add-series */
+#tfSeg{display:flex;gap:3px}
+.tfb{background:rgba(255,255,255,.05);border:1px solid var(--line2);color:var(--txt3);border-radius:7px;
+  font:700 9.5px var(--sans);letter-spacing:.5px;min-height:24px;padding:3px 8px;cursor:pointer;transition:.12s}
+.tfb.on{background:rgba(226,98,13,.22);border-color:var(--acc2);color:var(--txt)}
+.tfb:hover{color:var(--txt)}
+#trendLegend .li{display:inline-flex;align-items:center;gap:5px}
+#trendLegend .li .lx{background:none;border:none;color:var(--txt3);cursor:pointer;font-size:14px;line-height:1;padding:0 1px;margin-left:1px}
+#trendLegend .li .lx:hover{color:var(--crit)}
+#trendAddWrap{padding:6px 4px 2px}
+#tfAdd{width:auto;font-size:10.5px;padding:5px 8px}
 .readas{display:flex;align-items:center;gap:8px;margin:7px 0 3px;flex-wrap:wrap}
 .readas select{width:auto;flex:0 1 auto;padding:5px 8px;font-size:11px}
 .readas .pbtn{min-height:28px;min-width:0;padding:5px 9px;font-size:11px}
@@ -545,13 +556,18 @@ table.pts tr.isalarm td.v{color:var(--crit)}
       <div class="ptitle"><span>Live Telemetry — SPL 1.0</span><span style="display:flex;gap:7px;align-items:center"><button class="pbtn" data-max="left" title="Expand">⤢</button><span class="chip" id="pollChip"><span class="dot ok"></span><span id="pollTxt">POLL 1 s</span></span></span></div>
       <div id="tiles"></div>
       <div id="trendWrap">
-        <div class="ptitle" style="padding:6px 4px 6px"><span>Supply / Return / Setpoint — °C</span></div>
-        <div style="position:relative"><canvas id="trendChart"></canvas><div id="trendTip"></div></div>
-        <div id="trendLegend">
-          <span class="li"><span class="sw" style="background:var(--s-teal-hi)"></span>Sec Supply T2</span>
-          <span class="li"><span class="sw" style="background:var(--s-orange)"></span>Sec Return T4</span>
-          <span class="li"><span class="sw" style="background:var(--txt3);height:1px;border-top:1px dashed var(--txt2)"></span>Setpoint</span>
+        <div class="ptitle" style="padding:6px 4px 6px">
+          <span>Trends — session history</span>
+          <span id="tfSeg" role="group" aria-label="Trend time frame">
+            <button class="tfb" data-tf="30" title="Last 30 seconds">30s</button>
+            <button class="tfb" data-tf="120" title="Last 2 minutes">2m</button>
+            <button class="tfb" data-tf="600" title="Last 10 minutes">10m</button>
+            <button class="tfb on" data-tf="0" title="Everything since the session started">All</button>
+          </span>
         </div>
+        <div style="position:relative"><canvas id="trendChart"></canvas><div id="trendTip"></div></div>
+        <div id="trendLegend"></div>
+        <div id="trendAddWrap"><select id="tfAdd" title="Add a point to the trend chart"><option value="">＋ add series…</option></select></div>
       </div>
     </div>
 
@@ -2639,56 +2655,88 @@ function updTiles(s){
 
 /* ---------- trend chart ---------- */
 let trendHover=null;
-function drawTrendGeneric(){
-  const cv=$('trendChart');const dpr=Math.min(devicePixelRatio,2);
-  const w=cv.clientWidth,h=cv.clientHeight;if(!w)return;
-  if(cv.width!==w*dpr){cv.width=w*dpr;cv.height=h*dpr;}
-  const x=cv.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
-  const series=(GEN_TILES.filter(t=>!t.digital&&genHist[t.id]&&genHist[t.id].length>2)).slice(0,2);
-  if(!series.length)return;
-  const N=Math.min(...series.map(s=>genHist[s.id].length),240);
-  let mn=Infinity,mx=-Infinity;series.forEach(s=>genHist[s.id].slice(-N).forEach(v=>{if(v<mn)mn=v;if(v>mx)mx=v;}));
-  const pad=Math.max((mx-mn)*.18,.5);mn-=pad;mx+=pad;
-  const px=i=>10+i/(N-1)*(w-42),py=v=>h-14-(v-mn)/(mx-mn)*(h-26);
-  x.strokeStyle='rgba(255,255,255,.05)';x.font='600 9px Inter,Arial';x.fillStyle='rgba(154,163,178,.7)';
-  for(let i=0;i<=3;i++){const v=mn+(mx-mn)*i/3,y=py(v);x.beginPath();x.moveTo(10,y);x.lineTo(w-32,y);x.stroke();
-    x.fillText(v.toFixed(mx-mn<10?1:0),w-28,y+3);}
-  series.forEach(s=>{const d=genHist[s.id].slice(-N);x.beginPath();
-    for(let i=0;i<d.length;i++)i?x.lineTo(px(i),py(d[i])):x.moveTo(px(i),py(d[i]));
-    x.strokeStyle=s.col;x.lineWidth=2;x.stroke();});
+/* ---------- trends: multi-series, per-point history from session start, selectable time frame ---------- */
+const HIST_CAP=7200;                                          // ~2 h at 1 s/sample, rolls oldest out
+const TREND_COLORS=['#2ec9de','#e8620c','#7e7bf2','#3fb950','#e3b341','#ff6b9d','#4dd0e1','#c084fc'];
+UI.hist={};                                                   // {pointId:{t:[ms],v:[eng value]}}
+UI.trendState={series:[],tf:0,t0:null};                       // tf seconds (0 = all since session start)
+function trendColorFor(id){const i=UI.trendState.series.indexOf(id);return TREND_COLORS[(i<0?0:i)%TREND_COLORS.length];}
+function clockHMS(t){const d=new Date(t),p=n=>String(n).padStart(2,'0');return p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());}
+function trendShort(p){return (p.name||p.id).replace(/Temperature/ig,'Temp').replace(/Secondary/ig,'Sec').replace(/Primary/ig,'Pri');}
+function captureHist(reads){
+  const now=Date.now();if(UI.trendState.t0==null)UI.trendState.t0=now;
+  reads.forEach(r=>{if(!r.vals||!r.vals.length||!r.q||r.q.code!==192)return;
+    const v=+r.vals[0];if(!isFinite(v))return;
+    const h=UI.hist[r.id]||(UI.hist[r.id]={t:[],v:[]});
+    h.t.push(now);h.v.push(v);if(h.t.length>HIST_CAP){h.t.shift();h.v.shift();}});
+}
+function defaultTrendSeries(){
+  const pref=['P08','P09','P04'].filter(id=>byId[id]);        // CDU supply / return / setpoint
+  if(pref.length>=2)return pref;
+  return DB.points.filter(p=>p.addrs&&p.addrs.length&&p.bit==null&&!(p.regType||'').toLowerCase().includes('bool')).slice(0,3).map(p=>p.id);
+}
+UI.initTrend=function(){if(!UI.trendState.series.length)UI.trendState.series=defaultTrendSeries();
+  rebuildTrendLegend();rebuildAddSeries();};
+UI.addTrend=function(id){const S=UI.trendState;if(!byId[id]||S.series.includes(id))return;
+  if(S.series.length>=8){toast('A trend holds up to 8 series — remove one first','warn');return;}
+  S.series.push(id);rebuildTrendLegend();rebuildAddSeries();drawTrend();if(selected===id)fillDetail(id);};
+UI.removeTrend=function(id){const S=UI.trendState;S.series=S.series.filter(x=>x!==id);
+  rebuildTrendLegend();rebuildAddSeries();drawTrend();if(selected===id)fillDetail(id);};
+UI.toggleTrend=function(id){UI.trendState.series.includes(id)?UI.removeTrend(id):UI.addTrend(id);};
+UI.setTrendTf=function(sec){UI.trendState.tf=sec;
+  document.querySelectorAll('#tfSeg .tfb').forEach(b=>b.classList.toggle('on',+b.dataset.tf===sec));drawTrend();};
+function rebuildTrendLegend(){
+  const host=$('trendLegend');if(!host)return;host.innerHTML='';
+  if(!UI.trendState.series.length){host.innerHTML='<span class="k" style="font-size:10px">No series — pick a point below, or “＋ Add to trend” from a point’s detail.</span>';return;}
+  UI.trendState.series.forEach(id=>{const p=byId[id];if(!p)return;
+    const el=document.createElement('span');el.className='li';
+    el.innerHTML=`<span class="sw" style="background:${trendColorFor(id)}"></span>${esc(trendShort(p))}${p.units?` <span class="k">${esc(p.units)}</span>`:''} <button class="lx" title="Remove ${esc(p.id)}" aria-label="Remove ${esc(p.id)} from trend">×</button>`;
+    el.querySelector('.lx').onclick=()=>UI.removeTrend(id);host.appendChild(el);});
+}
+function rebuildAddSeries(){
+  const sel=$('tfAdd');if(!sel)return;const cur=new Set(UI.trendState.series);
+  sel.innerHTML='<option value="">＋ add series…</option>'+
+    DB.points.filter(p=>p.addrs&&p.addrs.length&&!cur.has(p.id))
+      .map(p=>`<option value="${esc(p.id)}">${esc(p.id)} · ${esc(trendShort(p))}</option>`).join('');
 }
 function drawTrend(){
-  if(!SIM.isCDU)return drawTrendGeneric();
-  const cv=$('trendChart');const dpr=Math.min(devicePixelRatio,2);
-  const w=cv.clientWidth,h=cv.clientHeight;if(!w)return;
+  const cv=$('trendChart');if(!cv)return;
+  const dpr=Math.min(devicePixelRatio,2),w=cv.clientWidth,h=cv.clientHeight;if(!w)return;
   if(cv.width!==w*dpr){cv.width=w*dpr;cv.height=h*dpr;}
   const x=cv.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
-  const H=SIM.hist,n=H.T2.length;if(n<2)return;
-  const N=Math.min(n,240),o=n-N;
-  const T2=H.T2.slice(o),T4=H.T4.slice(o),SP=H.SP.slice(o);
-  let mn=Infinity,mx=-Infinity;[...T2,...T4,...SP].forEach(v=>{if(v<mn)mn=v;if(v>mx)mx=v;});
-  const pad=Math.max((mx-mn)*.18,.6);mn-=pad;mx+=pad;
-  const px=i=>10+i/(N-1)*(w-42), py=v=>h-14-(v-mn)/(mx-mn)*(h-26);
-  // recessive grid + labels
-  x.strokeStyle='rgba(255,255,255,.05)';x.lineWidth=1;x.font='600 9px Inter,Arial';x.fillStyle='rgba(154,163,178,.7)';
-  for(let i=0;i<=3;i++){const v=mn+(mx-mn)*i/3,y=py(v);
-    x.beginPath();x.moveTo(10,y);x.lineTo(w-32,y);x.stroke();x.fillText(v.toFixed(1),w-28,y+3);}
-  const line=(D,col,dash)=>{x.beginPath();x.setLineDash(dash||[]);
-    for(let i=0;i<N;i++)i?x.lineTo(px(i),py(D[i])):x.moveTo(px(i),py(D[i]));
-    x.strokeStyle=col;x.lineWidth=dash?1.4:2;x.stroke();x.setLineDash([]);};
-  line(SP,'rgba(154,163,178,.9)',[4,4]);line(T4,C.orange);line(T2,C.teal);
-  // hover crosshair
-  if(trendHover!=null){const i=Math.round((trendHover-10)/(w-42)*(N-1));
-    if(i>=0&&i<N){const X=px(i);x.strokeStyle='rgba(255,255,255,.25)';
-      x.beginPath();x.moveTo(X,6);x.lineTo(X,h-14);x.stroke();
-      [[T2[i],C.teal],[T4[i],C.orange]].forEach(([v,c])=>{x.beginPath();x.arc(X,py(v),3.5,0,7);
-        x.fillStyle=c;x.fill();x.strokeStyle='#0c0f15';x.lineWidth=2;x.stroke();});
-      const tip=$('trendTip');tip.style.display='block';
-      tip.style.left=Math.min(X+12,w-120)+'px';tip.style.top='8px';
-      tip.innerHTML=`<span style="color:${C.teal}">T2 ${T2[i].toFixed(2)} °C</span><br>
-        <span style="color:${C.orangeH}">T4 ${T4[i].toFixed(2)} °C</span><br>
-        <span style="color:${C.txt3}">SP ${SP[i].toFixed(1)} °C</span>`;}}
-  else $('trendTip').style.display='none';
+  const S=UI.trendState,now=Date.now(),winStart=S.tf>0?now-S.tf*1000:(S.t0||now-1000);
+  const padL=8,padR=52,padT=8,padB=16,plotW=w-padL-padR,plotH=h-padT-padB;
+  const series=[];
+  S.series.forEach(id=>{const hh=UI.hist[id],p=byId[id];if(!hh||!p)return;
+    const t=[],v=[];for(let i=0;i<hh.t.length;i++)if(hh.t[i]>=winStart){t.push(hh.t[i]);v.push(hh.v[i]);}
+    if(t.length)series.push({id,p,t,v,col:trendColorFor(id)});});
+  if(!series.length){x.fillStyle='rgba(154,163,178,.55)';x.font='600 11px ui-monospace,monospace';x.textAlign='center';
+    x.fillText('Waiting for samples… add a point to trend',w/2,h/2);x.textAlign='left';
+    const tp=$('trendTip');if(tp)tp.style.display='none';return;}
+  let mn=Infinity,mx=-Infinity;series.forEach(s=>s.v.forEach(val=>{if(val<mn)mn=val;if(val>mx)mx=val;}));
+  if(mn===mx){mn-=1;mx+=1;}const vp=(mx-mn)*.15;mn-=vp;mx+=vp;
+  const tMin=winStart,tMax=now;
+  const px=t=>padL+(tMax>tMin?(t-tMin)/(tMax-tMin):0)*plotW, py=val=>padT+(1-(val-mn)/(mx-mn))*plotH;
+  x.font='600 9px ui-monospace,monospace';
+  for(let i=0;i<=3;i++){const val=mn+(mx-mn)*i/3,y=py(val);
+    x.strokeStyle='rgba(255,255,255,.06)';x.beginPath();x.moveTo(padL,y);x.lineTo(w-padR,y);x.stroke();
+    x.fillStyle='rgba(154,163,178,.85)';x.fillText(val.toFixed(1),w-padR+4,y+3);}
+  x.fillStyle='rgba(154,163,178,.85)';x.textAlign='center';
+  [0,.5,1].forEach(f=>{const t=tMin+(tMax-tMin)*f,X=padL+f*plotW;x.fillText(clockHMS(t),Math.min(Math.max(X,20),w-padR-20),h-4);});
+  x.textAlign='left';
+  series.forEach(s=>{x.beginPath();x.strokeStyle=s.col;x.lineWidth=2;
+    for(let i=0;i<s.t.length;i++){const X=px(s.t[i]),Y=py(s.v[i]);i?x.lineTo(X,Y):x.moveTo(X,Y);}x.stroke();
+    const li=s.t.length-1,X=px(s.t[li]),Y=py(s.v[li]);
+    x.beginPath();x.arc(X,Y,2.5,0,7);x.fillStyle=s.col;x.fill();
+    x.font='700 9px ui-monospace,monospace';x.fillStyle=s.col;x.fillText(s.v[li].toFixed(1),Math.min(X+5,w-padR-1),Math.max(Y-4,10));});
+  if(trendHover!=null){
+    const tHov=tMin+(Math.min(Math.max(trendHover,padL),padL+plotW)-padL)/plotW*(tMax-tMin),X=px(tHov);
+    x.strokeStyle='rgba(255,255,255,.22)';x.beginPath();x.moveTo(X,padT);x.lineTo(X,h-padB);x.stroke();
+    let tip='';series.forEach(s=>{let bi=0,bd=Infinity;for(let i=0;i<s.t.length;i++){const d=Math.abs(s.t[i]-tHov);if(d<bd){bd=d;bi=i;}}
+      const Y=py(s.v[bi]);x.beginPath();x.arc(X,Y,3,0,7);x.fillStyle=s.col;x.fill();x.strokeStyle='#0c0f15';x.lineWidth=2;x.stroke();
+      tip+=`<span style="color:${s.col}">${esc(trendShort(s.p))} ${s.v[bi].toFixed(2)}${s.p.units?' '+esc(s.p.units):''}</span><br>`;});
+    const tp=$('trendTip');tp.style.display='block';tp.style.left=Math.min(X+12,w-135)+'px';tp.style.top='6px';tp.innerHTML=tip;
+  } else {const tp=$('trendTip');if(tp)tp.style.display='none';}
 }
 
 /* ---------- points table ---------- */
@@ -2713,6 +2761,7 @@ function buildTable(){
 }
 function updTable(){
   const reads=SIM.readAll();
+  captureHist(reads);                          // per-point session history for the trends
   let tot=0,rx=0;
   reads.forEach(r=>{const p=byId[r.id]||DB.points.find(x=>x.id===r.id);
     if(!p||!p.addrs||!p.addrs.length)return;tot++;
@@ -2773,7 +2822,17 @@ function applyReadEdit(id,label){
   toast(`${label}${draft?' · field-draft (save & propose to persist)':''}`,'good',3000);
   const dev=window.W1_ACTIVE_TEMPLATE&&W1_ACTIVE_TEMPLATE.id;
   if(dev&&window.REGISTRY){REGISTRY.snapshotDraft(dev);
-    if(window.W1AGENT&&W1AGENT.present)REGISTRY.saveDraft(dev).catch(()=>{});}
+    if(window.W1AGENT&&W1AGENT.present){
+      // Save the draft so the agent reads the point with its NEW span (a 32-bit
+      // point now reads addr + addr+1), then poll once so the reinterpreted value
+      // appears immediately instead of BAD-until-the-next-natural-poll.
+      REGISTRY.saveDraft(dev)
+        .then(()=>(window.LIVE&&LIVE.valuesLive)?LIVE.pollOnce():null)
+        .then(()=>{if(window.LIVE&&LIVE.valuesLive){recomposeLive(id);updTable();
+          if(selected===id)fillDetail(id);try{drawTrend();}catch(e){}}})
+        .catch(()=>{});
+    }
+  }
 }
 UI.setReadAs=function(id,fmt){
   const m=RA_MAP[fmt];if(!m)return;
@@ -2808,6 +2867,7 @@ function fillDetail(id){
       </select>
       <button class="pbtn" id="raWord_${esc(p.id)}" title="Swap 32-bit word order (float / 32-bit only)">Word ${((p.wordOrder||'hilo')==='lohi')?'LO-HI':'HI-LO'}</button>
       <span class="k" style="font-size:9px">live re-decode → field-draft</span></div>`:''}
+    ${p.addrs&&p.addrs.length?`<div style="margin:5px 0 2px"><button class="pbtn" id="trBtn_${esc(p.id)}">${UI.trendState.series.includes(p.id)?'− Remove from trend':'＋ Add to trend'}</button></div>`:''}
     ${p.min!=null?`<div><span class="k">Range:</span> ${p.min} … ${p.max} ${esc(p.units||'')} · <span class="k">gain</span> ${p.gain}</div>`:''}
     ${p.alarmDev&&(p.alarmDev.L||p.alarmDev.H)?`<div><span class="k">Alarm dev:</span> ${p.alarmDev.LL?'LL '+esc(p.alarmDev.LL)+'% ':''}${p.alarmDev.L?'L '+esc(p.alarmDev.L)+'% ':''}${p.alarmDev.H?'H '+esc(p.alarmDev.H)+'% ':''}${p.alarmDev.HH?'HH '+esc(p.alarmDev.HH)+'%':''} <span class="k">(% of range)</span></div>`:''}
     ${p.severity?`<div><span class="k">Severity:</span> ${esc(p.severity)}${p.notifyEng?' · notify engineers':''}</div>`:''}
@@ -2821,6 +2881,7 @@ function fillDetail(id){
     ${p.equinixComment?`<div><span class="k">Equinix:</span> ${esc(p.equinixComment).replace(/\n/g,' ')}</div>`:''}`;
   const raSel=$('raSel_'+id);if(raSel)raSel.onchange=e=>UI.setReadAs(id,e.target.value);
   const raWord=$('raWord_'+id);if(raWord)raWord.onclick=()=>UI.setWordOrder(id,((byId[id].wordOrder||'hilo')==='hilo')?'lohi':'hilo');
+  const trBtn=$('trBtn_'+id);if(trBtn)trBtn.onclick=()=>UI.toggleTrend(id);
 }
 
 /* ---------- bench ---------- */
@@ -2922,6 +2983,9 @@ UI.init=function(){
   const tc=$('trendChart');
   tc.addEventListener('pointermove',e=>{const r=tc.getBoundingClientRect();trendHover=e.clientX-r.left;});
   tc.addEventListener('pointerleave',()=>trendHover=null);
+  UI.initTrend();
+  document.querySelectorAll('#tfSeg .tfb').forEach(b=>b.onclick=()=>UI.setTrendTf(+b.dataset.tf));
+  const tfAdd=$('tfAdd');if(tfAdd)tfAdd.onchange=e=>{const v=e.target.value;if(v){UI.addTrend(v);e.target.value='';}};
   // Expandable data panels: one panel at a time pops to a large overlay so the
   // trend / points table / test bench get real room and the 3D window shrinks.
   const syncMaxBtns=()=>document.querySelectorAll('.pbtn[data-max]').forEach(x=>{

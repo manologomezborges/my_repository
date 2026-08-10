@@ -200,6 +200,17 @@ input[type=password]:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(249
 /* expand/restore control on data panels — give trends/points/bench more room, less 3D */
 .pbtn{pointer-events:auto;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--txt2);
   border-radius:7px;font:600 13px var(--mono);line-height:1;min-width:32px;min-height:32px;padding:0 8px;cursor:pointer;transition:border .15s,color .15s}
+/* trend controls: time-frame segmented buttons, removable legend chips, add-series */
+#tfSeg{display:flex;gap:3px}
+.tfb{background:rgba(255,255,255,.05);border:1px solid var(--line2);color:var(--txt3);border-radius:7px;
+  font:700 9.5px var(--sans);letter-spacing:.5px;min-height:24px;padding:3px 8px;cursor:pointer;transition:.12s}
+.tfb.on{background:rgba(226,98,13,.22);border-color:var(--acc2);color:var(--txt)}
+.tfb:hover{color:var(--txt)}
+#trendLegend .li{display:inline-flex;align-items:center;gap:5px}
+#trendLegend .li .lx{background:none;border:none;color:var(--txt3);cursor:pointer;font-size:14px;line-height:1;padding:0 1px;margin-left:1px}
+#trendLegend .li .lx:hover{color:var(--crit)}
+#trendAddWrap{padding:6px 4px 2px}
+#tfAdd{width:auto;font-size:10.5px;padding:5px 8px}
 .readas{display:flex;align-items:center;gap:8px;margin:7px 0 3px;flex-wrap:wrap}
 .readas select{width:auto;flex:0 1 auto;padding:5px 8px;font-size:11px}
 .readas .pbtn{min-height:28px;min-width:0;padding:5px 9px;font-size:11px}

@@ -138,13 +138,18 @@
       <div class="ptitle"><span>Live Telemetry — SPL 1.0</span><span style="display:flex;gap:7px;align-items:center"><button class="pbtn" data-max="left" title="Expand">⤢</button><span class="chip" id="pollChip"><span class="dot ok"></span><span id="pollTxt">POLL 1 s</span></span></span></div>
       <div id="tiles"></div>
       <div id="trendWrap">
-        <div class="ptitle" style="padding:6px 4px 6px"><span>Supply / Return / Setpoint — °C</span></div>
-        <div style="position:relative"><canvas id="trendChart"></canvas><div id="trendTip"></div></div>
-        <div id="trendLegend">
-          <span class="li"><span class="sw" style="background:var(--s-teal-hi)"></span>Sec Supply T2</span>
-          <span class="li"><span class="sw" style="background:var(--s-orange)"></span>Sec Return T4</span>
-          <span class="li"><span class="sw" style="background:var(--txt3);height:1px;border-top:1px dashed var(--txt2)"></span>Setpoint</span>
+        <div class="ptitle" style="padding:6px 4px 6px">
+          <span>Trends — session history</span>
+          <span id="tfSeg" role="group" aria-label="Trend time frame">
+            <button class="tfb" data-tf="30" title="Last 30 seconds">30s</button>
+            <button class="tfb" data-tf="120" title="Last 2 minutes">2m</button>
+            <button class="tfb" data-tf="600" title="Last 10 minutes">10m</button>
+            <button class="tfb on" data-tf="0" title="Everything since the session started">All</button>
+          </span>
         </div>
+        <div style="position:relative"><canvas id="trendChart"></canvas><div id="trendTip"></div></div>
+        <div id="trendLegend"></div>
+        <div id="trendAddWrap"><select id="tfAdd" title="Add a point to the trend chart"><option value="">＋ add series…</option></select></div>
       </div>
     </div>
 
