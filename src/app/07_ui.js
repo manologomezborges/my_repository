@@ -426,8 +426,23 @@ UI.updFieldLock=function(){const c=$('fieldChip');if(!c)return;
   const on=!!(window.LIVE&&LIVE.valuesLive);   // connected to a real device → laptop is air-gapped
   if(on){c.classList.remove('hidden');
     if(!UI._fieldToast){UI._fieldToast=1;
-      toast('🔒 Field lock engaged — while you are on the asset, WitnessONE blocks the central registry, TOP Server and every online/API connection.','',5600);}}
-  else{c.classList.add('hidden');UI._fieldToast=0;}
+      toast('🔒 Field lock engaged — while you are on the asset, WitnessONE blocks the central registry, TOP Server and every online/API connection.','',5600);
+      UI.checkExposure();UI._expoTimer=setInterval(UI.checkExposure,20000);}}
+  else{c.classList.add('hidden');c.classList.remove('exposed');UI._fieldToast=0;UI._expoWarned=0;UI._netExposed=false;
+    if(UI._expoTimer){clearInterval(UI._expoTimer);UI._expoTimer=null;}}
+};
+/* Detect-and-WARN only (never touches the OS network): if the laptop still has an
+   internet-capable route while on the asset, tell the operator to turn Wi-Fi off
+   for a true air-gap. WitnessONE's own egress is already blocked by the lock. */
+UI.checkExposure=async function(){
+  if(!(window.LIVE&&LIVE.valuesLive)||!(window.W1AGENT&&W1AGENT.present))return;
+  let ex=false;try{const s=await W1AGENT.status();ex=!!(s&&s.netExposed);}catch(e){return;}
+  UI._netExposed=ex;const c=$('fieldChip');if(!c)return;
+  c.classList.toggle('exposed',ex);
+  c.innerHTML=ex?'⚠ FIELD LOCK · WI-FI STILL ON':'🔒 FIELD LOCK · NETWORK ISOLATED';
+  if(ex&&!UI._expoWarned){UI._expoWarned=1;
+    toast('⚠ This laptop still has an internet route while you are on the asset. WitnessONE blocks its OWN connections, but for a true air-gap turn Wi-Fi OFF.','warn',7000);}
+  if(!ex)UI._expoWarned=0;
 };
 /* ---------- link / poll ---------- */
 function updLink(s){

@@ -211,6 +211,22 @@ def release_field(phase="prep"):
         FIELD["locked"] = False; FIELD["phase"] = phase
         print(f"  [FIELD LOCK] released — phase={phase}; external connections allowed")
 
+def internet_route():
+    """(exposed, source_ip): is there a route to the public internet — i.e. is the
+    laptop NOT physically air-gapped (Wi-Fi/LAN still up)? A UDP connect() only
+    does a routing-table lookup and sends NO packet, so this never reaches out.
+    No route (true air-gap) raises OSError → not exposed. Detect-and-warn only;
+    the tool never changes the OS network state."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.settimeout(0.25)
+        try:
+            s.connect(("1.1.1.1", 53)); ip = s.getsockname()[0]
+            return (not ip.startswith("127."), ip)
+        finally:
+            s.close()
+    except OSError:
+        return (False, None)
+
 def remote_call(method, path, body=None):
     if not ARGS.remote: return None
     if FIELD["locked"]:
@@ -681,7 +697,8 @@ class H(BaseHTTPRequestHandler):
                                     "templates": len(load_templates()), "records": n,
                                     "remoteRegistry": bool(ARGS.remote),
                                     "topserverProxy": bool(ARGS.topserver),
-                                    "phase": FIELD["phase"], "fieldLock": FIELD["locked"]})
+                                    "phase": FIELD["phase"], "fieldLock": FIELD["locked"],
+                                    "netExposed": internet_route()[0]})
         if u.path == "/registry/devices":
             return self._json(200, {"source": "agent", "devices": load_devices(),
                                     "pointslists": load_lists(), "templates": load_templates()})

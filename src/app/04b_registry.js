@@ -157,6 +157,7 @@ AGENT.writeReg=async function(body){const r=await afetch('/modbus/write',
   return r.data||{ok:false};};
 AGENT.setPhase=async function(phase){return afetch('/agent/phase',{method:'POST',
   headers:{'Content-Type':'application/json'},body:JSON.stringify({phase})},1500);};
+AGENT.status=async function(){const r=await afetch('/agent/status',{},1200);return r.ok?r.data:null;};
 AGENT.saveRun=async function(run){const r=await afetch('/records/runs',
   {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(run)},4000);
   return r.data||{ok:false};};
