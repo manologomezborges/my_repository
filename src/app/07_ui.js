@@ -225,6 +225,64 @@ UI.selectPoint=function(id){
   const tr=$('pr_'+id);if(tr){tr.classList.add('sel');tr.scrollIntoView({block:'nearest',behavior:'smooth'});}
   fillDetail(id);
 };
+/* ---------- field "Read as…" — reinterpret a register live (like a real Modbus tool) ---------- */
+const RA_MAP={
+  uint16 :{span32:false,signed:'Unsigned',regType:'16int',  bit:null},
+  int16  :{span32:false,signed:'Signed',  regType:'16int',  bit:null},
+  uint32 :{span32:true, signed:'Unsigned',regType:'32int',  bit:null},
+  int32  :{span32:true, signed:'Signed',  regType:'32int',  bit:null},
+  float32:{span32:true, signed:'Unsigned',regType:'float32',bit:null},
+  bool   :{span32:false,signed:'Unsigned',regType:'Boolean',bit:null}
+};
+const RA_LABEL={uint16:'uint16 · word',int16:'int16 · short',uint32:'uint32 · dword (2 reg)',
+  int32:'int32 · long (2 reg)',float32:'float32 (2 reg)',bool:'bool · on/off'};
+function fmtOf(p){
+  const rt=(p.regType||'').toLowerCase();
+  if(p.bit!=null)return '';                                  // bit-mapped: not one of the simple menu choices
+  if(p.span32)return rt==='float32'?'float32':(p.signed==='Signed'?'int32':'uint32');
+  if(rt.includes('bool'))return 'bool';
+  return p.signed==='Signed'?'int16':'uint16';
+}
+function ensureDraftForEdit(){                                // AD-5: never mutate an approved revision in place
+  const id=window.W1_ACTIVE_TEMPLATE&&W1_ACTIVE_TEMPLATE.id;
+  if(!id||!window.REGISTRY)return null;
+  const st=(W1_ACTIVE_TEMPLATE.registry&&W1_ACTIVE_TEMPLATE.registry.revStatus)||'approved';
+  if(st==='approved'){const nr=REGISTRY.forkDraft(id);window.W1_FILLSPL&&W1_FILLSPL();
+    toast(`✎ Approved list untouched — edits go to a new revision: ${nr.splVersion}`,'',4200);}
+  return id;
+}
+function recomposeLive(id){                                   // re-decode the last raw words with the new interpretation
+  if(!(window.LIVE&&LIVE.valuesLive&&LIVE.st&&LIVE.st.raw))return;
+  const p=byId[id];if(!p)return;
+  const o=LIVE.composePoint(p,LIVE.st.raw,LIVE.source!=='agent');o.ts=Date.now();
+  LIVE.st.values[id]=o;
+}
+function applyReadEdit(id,label){
+  UI.rebuildPoints&&UI.rebuildPoints();      // byId → the mutated object (a fork can swap SPL_DB objects)
+  recomposeLive(id);                         // re-decode last raw words with the new interpretation
+  updTable();
+  fillDetail(id);try{drawTrend();}catch(e){}
+  const draft=window.W1_ACTIVE_TEMPLATE&&W1_ACTIVE_TEMPLATE.registry.revStatus==='field-draft';
+  toast(`${label}${draft?' · field-draft (save & propose to persist)':''}`,'good',3000);
+  const dev=window.W1_ACTIVE_TEMPLATE&&W1_ACTIVE_TEMPLATE.id;
+  if(dev&&window.REGISTRY){REGISTRY.snapshotDraft(dev);
+    if(window.W1AGENT&&W1AGENT.present)REGISTRY.saveDraft(dev).catch(()=>{});}
+}
+UI.setReadAs=function(id,fmt){
+  const m=RA_MAP[fmt];if(!m)return;
+  ensureDraftForEdit();                       // may fork + rebuild SPL_DB, so resolve the point AFTER
+  const p=(window.SPL_DB.points||[]).find(x=>x.id===id);
+  if(!p||!p.addrs||!p.addrs.length)return;
+  Object.assign(p,m);
+  applyReadEdit(id,`${id} → read as ${fmt}`);
+};
+UI.setWordOrder=function(id,order){
+  ensureDraftForEdit();
+  const p=(window.SPL_DB.points||[]).find(x=>x.id===id);if(!p)return;
+  p.wordOrder=order;
+  applyReadEdit(id,`${id} word order → ${order.toUpperCase()}`);
+};
+
 function fillDetail(id){
   const p=byId[id],r=lastReads[id];if(!p)return;
   const g=p.gain!=null?p.gain:null;
@@ -237,6 +295,12 @@ function fillDetail(id){
     <h4>${esc(p.name)} <span style="color:var(--txt3);font-weight:500">· ${esc(p.id)} · class ${esc(p.cls)}${p.clsFlag&&p.clsFlag!=='A'?' ('+esc(p.clsFlag)+')':''}</span></h4>
     <div><span class="k">Vendor:</span> ${esc(p.vendorName||'—').replace(/\n/g,' · ')}</div>
     <div><span class="k">Modbus:</span> ${p.addrRaw?esc(p.addrRaw).replace(/\n/g,', '):'—'} · <span class="k">type</span> ${esc(p.regType||'—')} ${p.signed&&p.signed!=='N/A'?esc(p.signed):''} · <span class="k">read FC</span> ${esc(p.readFC||'—')}${p.writeFC&&p.writeFC!=='N/A'?' · <span class="k">write FC</span> '+esc(p.writeFC):''}</div>
+    ${p.addrs&&p.addrs.length?`<div class="readas"><span class="k">Read as</span>
+      <select id="raSel_${esc(p.id)}" title="Reinterpret the register(s) — the live value re-decodes instantly">
+        ${Object.keys(RA_LABEL).map(f=>`<option value="${f}"${fmtOf(p)===f?' selected':''}>${RA_LABEL[f]}</option>`).join('')}
+      </select>
+      <button class="pbtn" id="raWord_${esc(p.id)}" title="Swap 32-bit word order (float / 32-bit only)">Word ${((p.wordOrder||'hilo')==='lohi')?'LO-HI':'HI-LO'}</button>
+      <span class="k" style="font-size:9px">live re-decode → field-draft</span></div>`:''}
     ${p.min!=null?`<div><span class="k">Range:</span> ${p.min} … ${p.max} ${esc(p.units||'')} · <span class="k">gain</span> ${p.gain}</div>`:''}
     ${p.alarmDev&&(p.alarmDev.L||p.alarmDev.H)?`<div><span class="k">Alarm dev:</span> ${p.alarmDev.LL?'LL '+esc(p.alarmDev.LL)+'% ':''}${p.alarmDev.L?'L '+esc(p.alarmDev.L)+'% ':''}${p.alarmDev.H?'H '+esc(p.alarmDev.H)+'% ':''}${p.alarmDev.HH?'HH '+esc(p.alarmDev.HH)+'%':''} <span class="k">(% of range)</span></div>`:''}
     ${p.severity?`<div><span class="k">Severity:</span> ${esc(p.severity)}${p.notifyEng?' · notify engineers':''}</div>`:''}
@@ -248,6 +312,8 @@ function fillDetail(id){
     ${dev?`<div style="color:var(--warn)">▲ SPL DEVIATION — ${esc(p.vendorComment||'').replace(/\n/g,' ')}</div>`:''}
     ${!dev&&p.vendorComment?`<div><span class="k">Note:</span> ${esc(p.vendorComment).replace(/\n/g,' ')}</div>`:''}
     ${p.equinixComment?`<div><span class="k">Equinix:</span> ${esc(p.equinixComment).replace(/\n/g,' ')}</div>`:''}`;
+  const raSel=$('raSel_'+id);if(raSel)raSel.onchange=e=>UI.setReadAs(id,e.target.value);
+  const raWord=$('raWord_'+id);if(raWord)raWord.onclick=()=>UI.setWordOrder(id,((byId[id].wordOrder||'hilo')==='hilo')?'lohi':'hilo');
 }
 
 /* ---------- bench ---------- */

@@ -200,6 +200,9 @@ input[type=password]:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(249
 /* expand/restore control on data panels — give trends/points/bench more room, less 3D */
 .pbtn{pointer-events:auto;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--txt2);
   border-radius:7px;font:600 13px var(--mono);line-height:1;min-width:32px;min-height:32px;padding:0 8px;cursor:pointer;transition:border .15s,color .15s}
+.readas{display:flex;align-items:center;gap:8px;margin:7px 0 3px;flex-wrap:wrap}
+.readas select{width:auto;flex:0 1 auto;padding:5px 8px;font-size:11px}
+.readas .pbtn{min-height:28px;min-width:0;padding:5px 9px;font-size:11px}
 /* reduced-motion: stop looping/decorative animation, keep alarms legible as a static border (F5.3) */
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}

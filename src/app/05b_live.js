@@ -11,7 +11,7 @@ const LIVE=window.LIVE={
   cfg:{base:'http://127.0.0.1:57418', user:'Administrator', pass:'', iot:'',
        ch:'CH_FWT01', dev:'CDU_01'},
   target:{mode:'provision', ch:'CH_FWT01', dev:'CDU_01'},
-  st:{about:null, channels:[], lastErr:null, tagMap:{}, values:{}, failCount:0, tagTotal:0},
+  st:{about:null, channels:[], lastErr:null, tagMap:{}, values:{}, raw:{}, failCount:0, tagTotal:0},
 };
 
 /* ---------------- HTTP core ---------------- */
@@ -162,6 +162,7 @@ LIVE.pollOnce=async function(){
         const o=LIVE.composePoint(p,r.data.values);o.ts=r.data.t;
         vals[p.id]=o;});
       LIVE.st.values=vals;
+      LIVE.st.raw=(r.data&&r.data.values)||{};   // keep raw words so a Read-as change re-decodes instantly
       if(LIVE.st.failCount>0||LIVE._lostToast){const lc=document.getElementById('linkChip'),lt=document.getElementById('linkTxt');
         if(lc){lc.className='chip ok';lt.textContent='LINK · GOOD (192)';}LIVE._lostToast=0;}
       LIVE.st.failCount=0;LIVE._skip=0;LIVE.inflight=false;return;
@@ -186,10 +187,10 @@ LIVE.pollOnce=async function(){
     const vals={};
     DB.points.forEach(p=>{ if(!p.addrs||!p.addrs.length)return;
       const o=LIVE.composePoint(p,valMap,true);o.ts=tsMap[p.id];vals[p.id]=o;});
-    LIVE.st.values=vals;LIVE.st.failCount=0;
+    LIVE.st.values=vals;LIVE.st.raw=valMap;LIVE.st.failCount=0;
   }catch(e){
     LIVE.st.failCount++;if(LIVE.st.failCount>=2){if(!LIVE._skip)LIVE._skip=4;
-      LIVE.st.values={};  // link lost — drop last values so reads go BAD, never served as live GOOD
+      LIVE.st.values={};LIVE.st.raw={};  // link lost — drop last values so reads go BAD, never served as live GOOD
       const lc=document.getElementById('linkChip'),lt=document.getElementById('linkTxt');
       if(lc){lc.className='chip bad';lt.textContent='LINK · LOST — RETRYING';}
       if(!LIVE._lostToast){LIVE._lostToast=1;try{toast('⚠ Link lost — retrying every ~5 s (device off? cable?)','warn',4200);}catch(e){}}}
