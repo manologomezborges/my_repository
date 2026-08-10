@@ -421,12 +421,21 @@ UI.setSourceChip=function(){const el=$('simChipIn');if(!el)return;
   else {el.className='chip warn';el.innerHTML='<span class="dot"></span>SIMULATED TELEMETRY';}
   UI.updSafe&&UI.updSafe();};
 
+/* ---------- field lock (security air-gap) awareness ---------- */
+UI.updFieldLock=function(){const c=$('fieldChip');if(!c)return;
+  const on=!!(window.LIVE&&LIVE.valuesLive);   // connected to a real device → laptop is air-gapped
+  if(on){c.classList.remove('hidden');
+    if(!UI._fieldToast){UI._fieldToast=1;
+      toast('🔒 Field lock engaged — while you are on the asset, WitnessONE blocks the central registry, TOP Server and every online/API connection.','',5600);}}
+  else{c.classList.add('hidden');UI._fieldToast=0;}
+};
 /* ---------- link / poll ---------- */
 function updLink(s){
   const bad=s.faults.comms;
   const lost=window.LIVE&&LIVE.valuesLive&&LIVE.st.failCount>=2;
   const lc=$('linkChip');lc.className='chip '+((bad||lost)?'bad':'ok');
   $('linkTxt').textContent=lost?'LINK · LOST — RETRYING':(bad?'LINK · BAD (24)':'LINK · GOOD (192)');
+  UI.updFieldLock&&UI.updFieldLock();
 }
 
 /* ---------- init ---------- */

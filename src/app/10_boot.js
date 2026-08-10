@@ -447,6 +447,7 @@ async function liveConnect(){
         else hsLine(`Block read failed after a good probe (${pr.raw&&(pr.raw.status||pr.raw.err)}) — <span style="color:var(--warn)">values stay SIMULATED</span>`);
       }else{
         LIVE.enabled=false;LIVE.valuesLive=false;
+        if(window.W1AGENT&&W1AGENT.present){try{W1AGENT.setPhase('prep');}catch(e){}}  // not on a device → release the lock
         hsLine(`<span style="color:var(--warn)">■ PRE-FLIGHT NOT PASSED — opening in SIMULATION.</span> Fix the link, then ☰ MENU → ⏏ Change asset to retry.`);
       }
     }
@@ -496,8 +497,10 @@ addEventListener('DOMContentLoaded',async()=>{
     make:$('make').value,model:$('model').value,fw:$('fw').value,mode}));}catch(e){}};
   $('btnConnect').onclick=()=>{saveSel();mode==='live'?liveConnect():simConnect();};
   $('btnHsCancel').onclick=hsCancel;
-  $('btnBack').onclick=()=>{
+  $('btnBack').onclick=async()=>{
     if(window.FWT&&FWT.running&&!confirm('A test sequence is running — abort it and return to the connect screen?'))return;
+    // leaving the asset releases the field lock so PREP/SYNC (registry) is allowed again
+    if(window.W1AGENT&&W1AGENT.present){try{await W1AGENT.setPhase('prep');}catch(e){}}
     try{sessionStorage.setItem('w1back','1');}catch(e){}
     location.reload();};
   $('btnDiscover').onclick=runDiscovery;

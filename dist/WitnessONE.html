@@ -201,6 +201,7 @@ input[type=password]:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(249
 .pbtn{pointer-events:auto;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--txt2);
   border-radius:7px;font:600 13px var(--mono);line-height:1;min-width:32px;min-height:32px;padding:0 8px;cursor:pointer;transition:border .15s,color .15s}
 /* trend controls: time-frame segmented buttons, removable legend chips, add-series */
+#fieldChip{background:linear-gradient(180deg,#e2620d,#b83c0a);color:#fff;font-weight:800;letter-spacing:.4px;text-shadow:0 1px 1px rgba(0,0,0,.4);box-shadow:0 0 0 1px rgba(255,255,255,.12),0 2px 10px rgba(226,98,13,.35)}
 #tfSeg{display:flex;gap:3px}
 .tfb{background:rgba(255,255,255,.05);border:1px solid var(--line2);color:var(--txt3);border-radius:7px;
   font:700 9.5px var(--sans);letter-spacing:.5px;min-height:24px;padding:3px 8px;cursor:pointer;transition:.12s}
@@ -525,6 +526,7 @@ table.pts tr.isalarm td.v{color:var(--crit)}
       <span class="fw" id="devFW">FW 1.0b19</span>
       <span class="chip ok" id="linkChip"><span class="dot"></span><span id="linkTxt">LINK · GOOD(192)</span></span>
       <span class="chip hidden" id="safeChip"><span class="dot"></span>READ-ONLY</span>
+      <span class="chip hidden" id="fieldChip" title="Security air-gap: no central registry, TOP Server or online/API connection while connected to the asset">🔒 FIELD LOCK · NETWORK ISOLATED</span>
     </div>
     <div class="sep"></div>
     <button class="btn small" id="btnTest">▶ RUN WITNESS TEST</button>
@@ -988,6 +990,8 @@ AGENT.probe=async function(body){const r=await afetch('/modbus/probe',
 AGENT.writeReg=async function(body){const r=await afetch('/modbus/write',
   {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},4000);
   return r.data||{ok:false};};
+AGENT.setPhase=async function(phase){return afetch('/agent/phase',{method:'POST',
+  headers:{'Content-Type':'application/json'},body:JSON.stringify({phase})},1500);};
 AGENT.saveRun=async function(run){const r=await afetch('/records/runs',
   {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(run)},4000);
   return r.data||{ok:false};};
@@ -2944,12 +2948,21 @@ UI.setSourceChip=function(){const el=$('simChipIn');if(!el)return;
   else {el.className='chip warn';el.innerHTML='<span class="dot"></span>SIMULATED TELEMETRY';}
   UI.updSafe&&UI.updSafe();};
 
+/* ---------- field lock (security air-gap) awareness ---------- */
+UI.updFieldLock=function(){const c=$('fieldChip');if(!c)return;
+  const on=!!(window.LIVE&&LIVE.valuesLive);   // connected to a real device → laptop is air-gapped
+  if(on){c.classList.remove('hidden');
+    if(!UI._fieldToast){UI._fieldToast=1;
+      toast('🔒 Field lock engaged — while you are on the asset, WitnessONE blocks the central registry, TOP Server and every online/API connection.','',5600);}}
+  else{c.classList.add('hidden');UI._fieldToast=0;}
+};
 /* ---------- link / poll ---------- */
 function updLink(s){
   const bad=s.faults.comms;
   const lost=window.LIVE&&LIVE.valuesLive&&LIVE.st.failCount>=2;
   const lc=$('linkChip');lc.className='chip '+((bad||lost)?'bad':'ok');
   $('linkTxt').textContent=lost?'LINK · LOST — RETRYING':(bad?'LINK · BAD (24)':'LINK · GOOD (192)');
+  UI.updFieldLock&&UI.updFieldLock();
 }
 
 /* ---------- init ---------- */
@@ -4527,6 +4540,7 @@ async function liveConnect(){
         else hsLine(`Block read failed after a good probe (${pr.raw&&(pr.raw.status||pr.raw.err)}) — <span style="color:var(--warn)">values stay SIMULATED</span>`);
       }else{
         LIVE.enabled=false;LIVE.valuesLive=false;
+        if(window.W1AGENT&&W1AGENT.present){try{W1AGENT.setPhase('prep');}catch(e){}}  // not on a device → release the lock
         hsLine(`<span style="color:var(--warn)">■ PRE-FLIGHT NOT PASSED — opening in SIMULATION.</span> Fix the link, then ☰ MENU → ⏏ Change asset to retry.`);
       }
     }
@@ -4576,8 +4590,10 @@ addEventListener('DOMContentLoaded',async()=>{
     make:$('make').value,model:$('model').value,fw:$('fw').value,mode}));}catch(e){}};
   $('btnConnect').onclick=()=>{saveSel();mode==='live'?liveConnect():simConnect();};
   $('btnHsCancel').onclick=hsCancel;
-  $('btnBack').onclick=()=>{
+  $('btnBack').onclick=async()=>{
     if(window.FWT&&FWT.running&&!confirm('A test sequence is running — abort it and return to the connect screen?'))return;
+    // leaving the asset releases the field lock so PREP/SYNC (registry) is allowed again
+    if(window.W1AGENT&&W1AGENT.present){try{await W1AGENT.setPhase('prep');}catch(e){}}
     try{sessionStorage.setItem('w1back','1');}catch(e){}
     location.reload();};
   $('btnDiscover').onclick=runDiscovery;

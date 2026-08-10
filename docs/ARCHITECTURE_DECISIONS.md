@@ -15,6 +15,24 @@ and learn the tool; killing sim would remove that.
 
 ## AD-2 · Online and field are mutually exclusive in time — enforced in software
 
+**Status: BUILT as the FIELD LOCK security control.** The Agent is the
+authoritative choke point: the moment the UI touches the device (any `/modbus/*`
+or `/net/ping` call) the lock auto-engages (`phase='field'`), and while engaged
+EVERY external egress path refuses *before opening a socket* — `remote_call`
+(central registry) returns a FIELD LOCK error and `/proxy/config` + `/proxy/iot`
+(TOP Server / IoT Gateway) return HTTP 423. Local records archiving (localhost
+SQLite) still works. The lock releases only when the operator leaves the asset
+(Change asset → `POST /agent/phase {prep}`) or when a live connect falls back to
+simulation. The operator is made aware by a prominent, always-visible topbar
+chip **🔒 FIELD LOCK · NETWORK ISOLATED** plus a one-time explainer toast.
+Verified by `qa/qa13_fieldlock.py`. Because enforcement lives in the Agent, the
+browser UI cannot bypass it. Remaining (optional, OS-level) hardening: detect
+that the laptop still has an internet-capable adapter up while in FIELD and warn
+(or, opt-in on Windows, disable the Wi-Fi adapter for a physical air-gap and
+restore it on release) — deferred because forcibly toggling radios is
+platform-specific, needs admin, and is destructive if mis-fired.
+
+
 The laptop is **never** connected to the internet and to the field asset at the
 same time (air-gapped field network, single NIC). This is a hard technical fact
 and must be **enforced by the software**, not just documented. The tool runs as

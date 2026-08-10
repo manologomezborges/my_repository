@@ -193,8 +193,28 @@ def _ssl_ctx():
         ctx.verify_mode = ssl.CERT_NONE
     return ctx
 
+# ---------------- FIELD LOCK — security air-gap while witnessing a device ----------------
+# The operator's laptop must never talk to the central registry / TOP Server / any
+# online API while it is plugged into a customer asset (air-gap; single-NIC field
+# network). The Agent is the authoritative choke point: while the lock is engaged
+# EVERY external egress path (remote_call, /proxy/*) refuses BEFORE opening a
+# socket. It auto-engages the moment the UI touches the device and is released
+# only when the operator explicitly leaves it (Change asset → phase 'prep').
+FIELD = {"locked": False, "phase": "prep"}   # phase: prep (online) | field (device) | sync (online)
+def engage_field():
+    if not FIELD["locked"]:
+        FIELD["locked"] = True; FIELD["phase"] = "field"
+        print("  [FIELD LOCK] ENGAGED — external registry/proxy/API connections blocked while a device is connected")
+def release_field(phase="prep"):
+    phase = phase if phase in ("prep", "sync") else "prep"
+    if FIELD["locked"] or FIELD["phase"] != phase:
+        FIELD["locked"] = False; FIELD["phase"] = phase
+        print(f"  [FIELD LOCK] released — phase={phase}; external connections allowed")
+
 def remote_call(method, path, body=None):
     if not ARGS.remote: return None
+    if FIELD["locked"]:
+        return {"ok": False, "error": "FIELD LOCK: external registry connection blocked while connected to a device (release it to go online)"}
     rq = urllib.request.Request(ARGS.remote.rstrip("/") + path,
         data=json.dumps(body).encode() if body is not None else None, method=method,
         headers={"Content-Type": "application/json"})
@@ -625,6 +645,8 @@ class H(BaseHTTPRequestHandler):
         self.send_response(204); self._cors(); self.end_headers()
 
     def _proxy(self):
+        if FIELD["locked"]:
+            return self._json(423, {"error": "FIELD LOCK: external TOP Server/IoT proxy blocked while connected to a device — Change asset to release the lock and go online"})
         which, rest = ("topserver", self.path[len("/proxy/config"):]) if self.path.startswith("/proxy/config") \
                       else ("iot", self.path[len("/proxy/iot"):])
         base = ARGS.topserver if which == "topserver" else ARGS.iot
@@ -651,13 +673,15 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self._guard(): return
         u = urlparse(self.path)
+        if u.path.startswith("/modbus/"): engage_field()   # touching the device air-gaps the laptop
         if u.path.startswith("/proxy/"): return self._proxy()
         if u.path == "/agent/status":
             c = db(); n = c.execute("SELECT COUNT(*) FROM runs").fetchone()[0]; c.close()
             return self._json(200, {"agent": "witnessone", "version": VERSION,
                                     "templates": len(load_templates()), "records": n,
                                     "remoteRegistry": bool(ARGS.remote),
-                                    "topserverProxy": bool(ARGS.topserver)})
+                                    "topserverProxy": bool(ARGS.topserver),
+                                    "phase": FIELD["phase"], "fieldLock": FIELD["locked"]})
         if u.path == "/registry/devices":
             return self._json(200, {"source": "agent", "devices": load_devices(),
                                     "pointslists": load_lists(), "templates": load_templates()})
@@ -715,6 +739,12 @@ class H(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         if u.path.startswith("/proxy/"): return self._proxy()
         body = self._body() or {}
+        if u.path.startswith("/modbus/") or u.path == "/net/ping": engage_field()
+        if u.path == "/agent/phase":
+            ph = (body or {}).get("phase", "prep")
+            if ph == "field": engage_field()
+            else: release_field(ph)
+            return self._json(200, {"ok": True, "phase": FIELD["phase"], "fieldLock": FIELD["locked"]})
         if u.path == "/modbus/discover":
             hosts = body.get("hosts") or []
             port, unit = int(body.get("port", 502)), int(body.get("unit", 1))
